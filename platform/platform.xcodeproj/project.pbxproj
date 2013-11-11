@@ -1,0 +1,1252 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXFileReference section */
+		3C97573818252E2800222CBB /* libplatform.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = libplatform.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
+		3C97574118252E4900222CBB /* Android.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = Android.mk; sourceTree = "<group>"; };
+		3C97574218252E4900222CBB /* clock_recovery.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = clock_recovery.cpp; sourceTree = "<group>"; };
+		3C97574318252E4900222CBB /* clock_recovery.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = clock_recovery.h; sourceTree = "<group>"; };
+		3C97574418252E4900222CBB /* common_clock.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = common_clock.cpp; sourceTree = "<group>"; };
+		3C97574518252E4900222CBB /* common_clock.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common_clock.h; sourceTree = "<group>"; };
+		3C97574618252E4900222CBB /* common_clock_service.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = common_clock_service.cpp; sourceTree = "<group>"; };
+		3C97574718252E4900222CBB /* common_clock_service.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common_clock_service.h; sourceTree = "<group>"; };
+		3C97574818252E4900222CBB /* common_time_config_service.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = common_time_config_service.cpp; sourceTree = "<group>"; };
+		3C97574918252E4900222CBB /* common_time_config_service.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common_time_config_service.h; sourceTree = "<group>"; };
+		3C97574A18252E4900222CBB /* common_time_server.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = common_time_server.cpp; sourceTree = "<group>"; };
+		3C97574B18252E4900222CBB /* common_time_server.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common_time_server.h; sourceTree = "<group>"; };
+		3C97574C18252E4900222CBB /* common_time_server_api.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = common_time_server_api.cpp; sourceTree = "<group>"; };
+		3C97574D18252E4900222CBB /* common_time_server_packets.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = common_time_server_packets.cpp; sourceTree = "<group>"; };
+		3C97574E18252E4900222CBB /* common_time_server_packets.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = common_time_server_packets.h; sourceTree = "<group>"; };
+		3C97574F18252E4900222CBB /* diag_thread.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = diag_thread.cpp; sourceTree = "<group>"; };
+		3C97575018252E4900222CBB /* diag_thread.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = diag_thread.h; sourceTree = "<group>"; };
+		3C97575118252E4900222CBB /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
+		3C97575218252E4900222CBB /* utils.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = utils.cpp; sourceTree = "<group>"; };
+		3C97575318252E4900222CBB /* utils.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = utils.h; sourceTree = "<group>"; };
+		3C97575518252E4900222CBB /* Android.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = Android.mk; sourceTree = "<group>"; };
+		3C97575618252E4900222CBB /* EventHub.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EventHub.cpp; sourceTree = "<group>"; };
+		3C97575718252E4900222CBB /* EventHub.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EventHub.h; sourceTree = "<group>"; };
+		3C97575818252E4900222CBB /* InputApplication.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = InputApplication.cpp; sourceTree = "<group>"; };
+		3C97575918252E4900222CBB /* InputApplication.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = InputApplication.h; sourceTree = "<group>"; };
+		3C97575A18252E4900222CBB /* InputDispatcher.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = InputDispatcher.cpp; sourceTree = "<group>"; };
+		3C97575B18252E4900222CBB /* InputDispatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = InputDispatcher.h; sourceTree = "<group>"; };
+		3C97575C18252E4900222CBB /* InputListener.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = InputListener.cpp; sourceTree = "<group>"; };
+		3C97575D18252E4900222CBB /* InputListener.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = InputListener.h; sourceTree = "<group>"; };
+		3C97575E18252E4900222CBB /* InputManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = InputManager.cpp; sourceTree = "<group>"; };
+		3C97575F18252E4900222CBB /* InputManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = InputManager.h; sourceTree = "<group>"; };
+		3C97576018252E4900222CBB /* InputReader.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = InputReader.cpp; sourceTree = "<group>"; };
+		3C97576118252E4900222CBB /* InputReader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = InputReader.h; sourceTree = "<group>"; };
+		3C97576218252E4900222CBB /* InputWindow.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = InputWindow.cpp; sourceTree = "<group>"; };
+		3C97576318252E4900222CBB /* InputWindow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = InputWindow.h; sourceTree = "<group>"; };
+		3C97576418252E4900222CBB /* PointerController.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = PointerController.cpp; sourceTree = "<group>"; };
+		3C97576518252E4900222CBB /* PointerController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PointerController.h; sourceTree = "<group>"; };
+		3C97576618252E4900222CBB /* SpriteController.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SpriteController.cpp; sourceTree = "<group>"; };
+		3C97576718252E4900222CBB /* SpriteController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SpriteController.h; sourceTree = "<group>"; };
+		3C97576918252E4900222CBB /* Android.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = Android.mk; sourceTree = "<group>"; };
+		3C97576A18252E4900222CBB /* InputDispatcher_test.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = InputDispatcher_test.cpp; sourceTree = "<group>"; };
+		3C97576B18252E4900222CBB /* InputReader_test.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = InputReader_test.cpp; sourceTree = "<group>"; };
+		3C97576D18252E4900222CBB /* Android.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = Android.mk; sourceTree = "<group>"; };
+		3C97577218252E4900222CBB /* AccessibilityInputFilter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AccessibilityInputFilter.java; sourceTree = "<group>"; };
+		3C97577318252E4900222CBB /* AccessibilityManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AccessibilityManagerService.java; sourceTree = "<group>"; };
+		3C97577418252E4900222CBB /* EventStreamTransformation.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = EventStreamTransformation.java; sourceTree = "<group>"; };
+		3C97577518252E4900222CBB /* GestureUtils.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = GestureUtils.java; sourceTree = "<group>"; };
+		3C97577618252E4900222CBB /* ScreenMagnifier.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ScreenMagnifier.java; sourceTree = "<group>"; };
+		3C97577718252E4900222CBB /* TouchExplorer.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = TouchExplorer.java; sourceTree = "<group>"; };
+		3C97577918252E4900222CBB /* AccountAuthenticatorCache.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AccountAuthenticatorCache.java; sourceTree = "<group>"; };
+		3C97577A18252E4900222CBB /* AccountManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AccountManagerService.java; sourceTree = "<group>"; };
+		3C97577B18252E4900222CBB /* IAccountAuthenticatorCache.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = IAccountAuthenticatorCache.java; sourceTree = "<group>"; };
+		3C97577C18252E4900222CBB /* AlarmManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AlarmManagerService.java; sourceTree = "<group>"; };
+		3C97577E18252E4900222CBB /* ActiveServices.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ActiveServices.java; sourceTree = "<group>"; };
+		3C97577F18252E4900222CBB /* ActivityManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ActivityManagerService.java; sourceTree = "<group>"; };
+		3C97578018252E4900222CBB /* ActivityRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ActivityRecord.java; sourceTree = "<group>"; };
+		3C97578118252E4900222CBB /* ActivityResult.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ActivityResult.java; sourceTree = "<group>"; };
+		3C97578218252E4900222CBB /* ActivityStack.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ActivityStack.java; sourceTree = "<group>"; };
+		3C97578318252E4900222CBB /* AppBindRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppBindRecord.java; sourceTree = "<group>"; };
+		3C97578418252E4900222CBB /* AppErrorDialog.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppErrorDialog.java; sourceTree = "<group>"; };
+		3C97578518252E4900222CBB /* AppErrorResult.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppErrorResult.java; sourceTree = "<group>"; };
+		3C97578618252E4900222CBB /* AppNotRespondingDialog.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppNotRespondingDialog.java; sourceTree = "<group>"; };
+		3C97578718252E4900222CBB /* AppWaitingForDebuggerDialog.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppWaitingForDebuggerDialog.java; sourceTree = "<group>"; };
+		3C97578818252E4900222CBB /* BackupRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BackupRecord.java; sourceTree = "<group>"; };
+		3C97578918252E4900222CBB /* BaseErrorDialog.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BaseErrorDialog.java; sourceTree = "<group>"; };
+		3C97578A18252E4900222CBB /* BatteryStatsService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BatteryStatsService.java; sourceTree = "<group>"; };
+		3C97578B18252E4900222CBB /* BroadcastFilter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BroadcastFilter.java; sourceTree = "<group>"; };
+		3C97578C18252E4900222CBB /* BroadcastQueue.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BroadcastQueue.java; sourceTree = "<group>"; };
+		3C97578D18252E4900222CBB /* BroadcastRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BroadcastRecord.java; sourceTree = "<group>"; };
+		3C97578E18252E4900222CBB /* CompatModeDialog.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CompatModeDialog.java; sourceTree = "<group>"; };
+		3C97578F18252E4900222CBB /* CompatModePackages.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CompatModePackages.java; sourceTree = "<group>"; };
+		3C97579018252E4900222CBB /* ConnectionRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ConnectionRecord.java; sourceTree = "<group>"; };
+		3C97579118252E4900222CBB /* ContentProviderConnection.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ContentProviderConnection.java; sourceTree = "<group>"; };
+		3C97579218252E4900222CBB /* ContentProviderRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ContentProviderRecord.java; sourceTree = "<group>"; };
+		3C97579318252E4900222CBB /* CoreSettingsObserver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CoreSettingsObserver.java; sourceTree = "<group>"; };
+		3C97579418252E4900222CBB /* DeviceMonitor.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DeviceMonitor.java; sourceTree = "<group>"; };
+		3C97579518252E4900222CBB /* EventLogTags.logtags */ = {isa = PBXFileReference; lastKnownFileType = text; path = EventLogTags.logtags; sourceTree = "<group>"; };
+		3C97579618252E4900222CBB /* FactoryErrorDialog.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = FactoryErrorDialog.java; sourceTree = "<group>"; };
+		3C97579718252E4900222CBB /* IntentBindRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = IntentBindRecord.java; sourceTree = "<group>"; };
+		3C97579818252E4900222CBB /* LaunchWarningWindow.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LaunchWarningWindow.java; sourceTree = "<group>"; };
+		3C97579918252E4900222CBB /* NativeCrashListener.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NativeCrashListener.java; sourceTree = "<group>"; };
+		3C97579A18252E4900222CBB /* package.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = package.html; sourceTree = "<group>"; };
+		3C97579B18252E4900222CBB /* PendingIntentRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PendingIntentRecord.java; sourceTree = "<group>"; };
+		3C97579C18252E4900222CBB /* PendingThumbnailsRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PendingThumbnailsRecord.java; sourceTree = "<group>"; };
+		3C97579D18252E4900222CBB /* ProcessList.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ProcessList.java; sourceTree = "<group>"; };
+		3C97579E18252E4900222CBB /* ProcessRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ProcessRecord.java; sourceTree = "<group>"; };
+		3C97579F18252E4900222CBB /* ProviderMap.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ProviderMap.java; sourceTree = "<group>"; };
+		3C9757A018252E4900222CBB /* ReceiverList.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ReceiverList.java; sourceTree = "<group>"; };
+		3C9757A118252E4900222CBB /* ServiceRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ServiceRecord.java; sourceTree = "<group>"; };
+		3C9757A218252E4900222CBB /* StrictModeViolationDialog.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = StrictModeViolationDialog.java; sourceTree = "<group>"; };
+		3C9757A318252E4900222CBB /* TaskAccessInfo.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = TaskAccessInfo.java; sourceTree = "<group>"; };
+		3C9757A418252E4900222CBB /* TaskRecord.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = TaskRecord.java; sourceTree = "<group>"; };
+		3C9757A518252E4900222CBB /* ThumbnailHolder.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ThumbnailHolder.java; sourceTree = "<group>"; };
+		3C9757A618252E4900222CBB /* TransferPipe.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = TransferPipe.java; sourceTree = "<group>"; };
+		3C9757A718252E4900222CBB /* UriPermission.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UriPermission.java; sourceTree = "<group>"; };
+		3C9757A818252E4900222CBB /* UriPermissionOwner.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UriPermissionOwner.java; sourceTree = "<group>"; };
+		3C9757A918252E4900222CBB /* UsageStatsService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UsageStatsService.java; sourceTree = "<group>"; };
+		3C9757AA18252E4900222CBB /* UserStartedState.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UserStartedState.java; sourceTree = "<group>"; };
+		3C9757AB18252E4900222CBB /* AppOpsService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppOpsService.java; sourceTree = "<group>"; };
+		3C9757AC18252E4900222CBB /* AppWidgetService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppWidgetService.java; sourceTree = "<group>"; };
+		3C9757AD18252E4900222CBB /* AppWidgetServiceImpl.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppWidgetServiceImpl.java; sourceTree = "<group>"; };
+		3C9757AE18252E4900222CBB /* AttributeCache.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AttributeCache.java; sourceTree = "<group>"; };
+		3C9757AF18252E4900222CBB /* BackupManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BackupManagerService.java; sourceTree = "<group>"; };
+		3C9757B018252E4900222CBB /* BatteryService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BatteryService.java; sourceTree = "<group>"; };
+		3C9757B118252E4900222CBB /* BluetoothManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BluetoothManagerService.java; sourceTree = "<group>"; };
+		3C9757B218252E4900222CBB /* BootReceiver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BootReceiver.java; sourceTree = "<group>"; };
+		3C9757B318252E4900222CBB /* BrickReceiver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BrickReceiver.java; sourceTree = "<group>"; };
+		3C9757B418252E4900222CBB /* CertBlacklister.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CertBlacklister.java; sourceTree = "<group>"; };
+		3C9757B518252E4900222CBB /* ClipboardService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ClipboardService.java; sourceTree = "<group>"; };
+		3C9757B618252E4900222CBB /* CommonTimeManagementService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CommonTimeManagementService.java; sourceTree = "<group>"; };
+		3C9757B818252E4900222CBB /* Nat464Xlat.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Nat464Xlat.java; sourceTree = "<group>"; };
+		3C9757B918252E4900222CBB /* Tethering.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Tethering.java; sourceTree = "<group>"; };
+		3C9757BA18252E4900222CBB /* Vpn.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Vpn.java; sourceTree = "<group>"; };
+		3C9757BB18252E4900222CBB /* ConnectivityService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ConnectivityService.java; sourceTree = "<group>"; };
+		3C9757BD18252E4900222CBB /* ContentService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ContentService.java; sourceTree = "<group>"; };
+		3C9757BE18252E4900222CBB /* SyncManager.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SyncManager.java; sourceTree = "<group>"; };
+		3C9757BF18252E4900222CBB /* SyncOperation.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SyncOperation.java; sourceTree = "<group>"; };
+		3C9757C018252E4900222CBB /* SyncQueue.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SyncQueue.java; sourceTree = "<group>"; };
+		3C9757C118252E4900222CBB /* SyncStorageEngine.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SyncStorageEngine.java; sourceTree = "<group>"; };
+		3C9757C218252E4900222CBB /* CountryDetectorService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CountryDetectorService.java; sourceTree = "<group>"; };
+		3C9757C318252E4900222CBB /* DevicePolicyManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DevicePolicyManagerService.java; sourceTree = "<group>"; };
+		3C9757C418252E4900222CBB /* DeviceStorageMonitorService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DeviceStorageMonitorService.java; sourceTree = "<group>"; };
+		3C9757C518252E4900222CBB /* DiskStatsService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DiskStatsService.java; sourceTree = "<group>"; };
+		3C9757C718252E4900222CBB /* DisplayAdapter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayAdapter.java; sourceTree = "<group>"; };
+		3C9757C818252E4900222CBB /* DisplayDevice.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayDevice.java; sourceTree = "<group>"; };
+		3C9757C918252E4900222CBB /* DisplayDeviceInfo.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayDeviceInfo.java; sourceTree = "<group>"; };
+		3C9757CA18252E4900222CBB /* DisplayManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayManagerService.java; sourceTree = "<group>"; };
+		3C9757CB18252E4900222CBB /* DisplayTransactionListener.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayTransactionListener.java; sourceTree = "<group>"; };
+		3C9757CC18252E4900222CBB /* DisplayViewport.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayViewport.java; sourceTree = "<group>"; };
+		3C9757CD18252E4900222CBB /* HeadlessDisplayAdapter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = HeadlessDisplayAdapter.java; sourceTree = "<group>"; };
+		3C9757CE18252E4900222CBB /* LocalDisplayAdapter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LocalDisplayAdapter.java; sourceTree = "<group>"; };
+		3C9757CF18252E4900222CBB /* LogicalDisplay.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LogicalDisplay.java; sourceTree = "<group>"; };
+		3C9757D018252E4900222CBB /* OverlayDisplayAdapter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = OverlayDisplayAdapter.java; sourceTree = "<group>"; };
+		3C9757D118252E4900222CBB /* OverlayDisplayWindow.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = OverlayDisplayWindow.java; sourceTree = "<group>"; };
+		3C9757D218252E4900222CBB /* PersistentDataStore.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PersistentDataStore.java; sourceTree = "<group>"; };
+		3C9757D318252E4900222CBB /* WifiDisplayAdapter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WifiDisplayAdapter.java; sourceTree = "<group>"; };
+		3C9757D418252E4900222CBB /* WifiDisplayController.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WifiDisplayController.java; sourceTree = "<group>"; };
+		3C9757D518252E4900222CBB /* DockObserver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DockObserver.java; sourceTree = "<group>"; };
+		3C9757D718252E4900222CBB /* DreamController.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DreamController.java; sourceTree = "<group>"; };
+		3C9757D818252E4900222CBB /* DreamManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DreamManagerService.java; sourceTree = "<group>"; };
+		3C9757D918252E4900222CBB /* DropBoxManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DropBoxManagerService.java; sourceTree = "<group>"; };
+		3C9757DA18252E4900222CBB /* EntropyMixer.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = EntropyMixer.java; sourceTree = "<group>"; };
+		3C9757DB18252E4900222CBB /* EventLogTags.logtags */ = {isa = PBXFileReference; lastKnownFileType = text; path = EventLogTags.logtags; sourceTree = "<group>"; };
+		3C9757DD18252E4900222CBB /* AndFilter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AndFilter.java; sourceTree = "<group>"; };
+		3C9757DE18252E4900222CBB /* CategoryFilter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CategoryFilter.java; sourceTree = "<group>"; };
+		3C9757DF18252E4900222CBB /* Filter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Filter.java; sourceTree = "<group>"; };
+		3C9757E018252E4900222CBB /* FilterFactory.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = FilterFactory.java; sourceTree = "<group>"; };
+		3C9757E118252E4900222CBB /* FilterList.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = FilterList.java; sourceTree = "<group>"; };
+		3C9757E218252E4900222CBB /* IntentFirewall.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = IntentFirewall.java; sourceTree = "<group>"; };
+		3C9757E318252E4900222CBB /* NotFilter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NotFilter.java; sourceTree = "<group>"; };
+		3C9757E418252E4900222CBB /* OrFilter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = OrFilter.java; sourceTree = "<group>"; };
+		3C9757E518252E4900222CBB /* PortFilter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PortFilter.java; sourceTree = "<group>"; };
+		3C9757E618252E4900222CBB /* SenderFilter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SenderFilter.java; sourceTree = "<group>"; };
+		3C9757E718252E4900222CBB /* SenderPermissionFilter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SenderPermissionFilter.java; sourceTree = "<group>"; };
+		3C9757E818252E4900222CBB /* StringFilter.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = StringFilter.java; sourceTree = "<group>"; };
+		3C9757E918252E4900222CBB /* IdleMaintenanceService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = IdleMaintenanceService.java; sourceTree = "<group>"; };
+		3C9757EA18252E4900222CBB /* INativeDaemonConnectorCallbacks.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = INativeDaemonConnectorCallbacks.java; sourceTree = "<group>"; };
+		3C9757EC18252E4900222CBB /* InputApplicationHandle.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = InputApplicationHandle.java; sourceTree = "<group>"; };
+		3C9757ED18252E4900222CBB /* InputManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = InputManagerService.java; sourceTree = "<group>"; };
+		3C9757EE18252E4900222CBB /* InputWindowHandle.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = InputWindowHandle.java; sourceTree = "<group>"; };
+		3C9757EF18252E4900222CBB /* PersistentDataStore.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PersistentDataStore.java; sourceTree = "<group>"; };
+		3C9757F018252E4900222CBB /* InputMethodManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = InputMethodManagerService.java; sourceTree = "<group>"; };
+		3C9757F118252E4900222CBB /* IntentResolver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = IntentResolver.java; sourceTree = "<group>"; };
+		3C9757F218252E4900222CBB /* IntentResolverOld.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = IntentResolverOld.java; sourceTree = "<group>"; };
+		3C9757F318252E4900222CBB /* LightsService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LightsService.java; sourceTree = "<group>"; };
+		3C9757F518252E4900222CBB /* ComprehensiveCountryDetector.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ComprehensiveCountryDetector.java; sourceTree = "<group>"; };
+		3C9757F618252E4900222CBB /* CountryDetectorBase.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CountryDetectorBase.java; sourceTree = "<group>"; };
+		3C9757F718252E4900222CBB /* GeocoderProxy.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = GeocoderProxy.java; sourceTree = "<group>"; };
+		3C9757F818252E4900222CBB /* GeofenceManager.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = GeofenceManager.java; sourceTree = "<group>"; };
+		3C9757F918252E4900222CBB /* GeofenceProxy.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = GeofenceProxy.java; sourceTree = "<group>"; };
+		3C9757FA18252E4900222CBB /* GeofenceState.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = GeofenceState.java; sourceTree = "<group>"; };
+		3C9757FB18252E4900222CBB /* GpsLocationProvider.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = GpsLocationProvider.java; sourceTree = "<group>"; };
+		3C9757FC18252E4900222CBB /* GpsXtraDownloader.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = GpsXtraDownloader.java; sourceTree = "<group>"; };
+		3C9757FD18252E4900222CBB /* LocationBasedCountryDetector.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LocationBasedCountryDetector.java; sourceTree = "<group>"; };
+		3C9757FE18252E4900222CBB /* LocationBlacklist.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LocationBlacklist.java; sourceTree = "<group>"; };
+		3C9757FF18252E4900222CBB /* LocationFudger.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LocationFudger.java; sourceTree = "<group>"; };
+		3C97580018252E4900222CBB /* LocationProviderInterface.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LocationProviderInterface.java; sourceTree = "<group>"; };
+		3C97580118252E4900222CBB /* LocationProviderProxy.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LocationProviderProxy.java; sourceTree = "<group>"; };
+		3C97580218252E4900222CBB /* MockProvider.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = MockProvider.java; sourceTree = "<group>"; };
+		3C97580318252E4900222CBB /* PassiveProvider.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PassiveProvider.java; sourceTree = "<group>"; };
+		3C97580418252E4900222CBB /* LocationManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LocationManagerService.java; sourceTree = "<group>"; };
+		3C97580518252E4900222CBB /* LockSettingsService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LockSettingsService.java; sourceTree = "<group>"; };
+		3C97580618252E4900222CBB /* MasterClearReceiver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = MasterClearReceiver.java; sourceTree = "<group>"; };
+		3C97580718252E4900222CBB /* MountService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = MountService.java; sourceTree = "<group>"; };
+		3C97580818252E4900222CBB /* NativeDaemonConnector.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NativeDaemonConnector.java; sourceTree = "<group>"; };
+		3C97580918252E4900222CBB /* NativeDaemonConnectorException.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NativeDaemonConnectorException.java; sourceTree = "<group>"; };
+		3C97580A18252E4900222CBB /* NativeDaemonEvent.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NativeDaemonEvent.java; sourceTree = "<group>"; };
+		3C97580C18252E4900222CBB /* BaseNetworkObserver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BaseNetworkObserver.java; sourceTree = "<group>"; };
+		3C97580D18252E4900222CBB /* LockdownVpnTracker.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LockdownVpnTracker.java; sourceTree = "<group>"; };
+		3C97580E18252E4900222CBB /* NetworkIdentitySet.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NetworkIdentitySet.java; sourceTree = "<group>"; };
+		3C97580F18252E4900222CBB /* NetworkPolicyManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NetworkPolicyManagerService.java; sourceTree = "<group>"; };
+		3C97581018252E4900222CBB /* NetworkStatsCollection.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NetworkStatsCollection.java; sourceTree = "<group>"; };
+		3C97581118252E4900222CBB /* NetworkStatsRecorder.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NetworkStatsRecorder.java; sourceTree = "<group>"; };
+		3C97581218252E4900222CBB /* NetworkStatsService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NetworkStatsService.java; sourceTree = "<group>"; };
+		3C97581318252E4900222CBB /* NetworkManagementService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NetworkManagementService.java; sourceTree = "<group>"; };
+		3C97581418252E4900222CBB /* NetworkTimeUpdateService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NetworkTimeUpdateService.java; sourceTree = "<group>"; };
+		3C97581518252E4900222CBB /* NotificationManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NotificationManagerService.java; sourceTree = "<group>"; };
+		3C97581618252E4900222CBB /* NsdService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NsdService.java; sourceTree = "<group>"; };
+		3C97581818252E4900222CBB /* SchedulingPolicyService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SchedulingPolicyService.java; sourceTree = "<group>"; };
+		3C97581918252E4900222CBB /* PackageManagerBackupAgent.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PackageManagerBackupAgent.java; sourceTree = "<group>"; };
+		3C97581B18252E4900222CBB /* BasePermission.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BasePermission.java; sourceTree = "<group>"; };
+		3C97581C18252E4900222CBB /* GrantedPermissions.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = GrantedPermissions.java; sourceTree = "<group>"; };
+		3C97581D18252E4900222CBB /* Installer.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Installer.java; sourceTree = "<group>"; };
+		3C97581E18252E4900222CBB /* PackageManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PackageManagerService.java; sourceTree = "<group>"; };
+		3C97581F18252E4900222CBB /* PackageSetting.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PackageSetting.java; sourceTree = "<group>"; };
+		3C97582018252E4900222CBB /* PackageSettingBase.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PackageSettingBase.java; sourceTree = "<group>"; };
+		3C97582118252E4900222CBB /* PackageSignatures.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PackageSignatures.java; sourceTree = "<group>"; };
+		3C97582218252E4900222CBB /* PackageVerificationResponse.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PackageVerificationResponse.java; sourceTree = "<group>"; };
+		3C97582318252E4900222CBB /* PackageVerificationState.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PackageVerificationState.java; sourceTree = "<group>"; };
+		3C97582418252E4900222CBB /* PendingPackage.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PendingPackage.java; sourceTree = "<group>"; };
+		3C97582518252E4900222CBB /* PreferredActivity.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PreferredActivity.java; sourceTree = "<group>"; };
+		3C97582618252E4900222CBB /* PreferredIntentResolver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PreferredIntentResolver.java; sourceTree = "<group>"; };
+		3C97582718252E4900222CBB /* SELinuxMMAC.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SELinuxMMAC.java; sourceTree = "<group>"; };
+		3C97582818252E4900222CBB /* Settings.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Settings.java; sourceTree = "<group>"; };
+		3C97582918252E4900222CBB /* SharedUserSetting.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SharedUserSetting.java; sourceTree = "<group>"; };
+		3C97582A18252E4900222CBB /* UserManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UserManagerService.java; sourceTree = "<group>"; };
+		3C97582C18252E4900222CBB /* DisplayBlanker.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayBlanker.java; sourceTree = "<group>"; };
+		3C97582D18252E4900222CBB /* DisplayPowerController.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayPowerController.java; sourceTree = "<group>"; };
+		3C97582E18252E4900222CBB /* DisplayPowerRequest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayPowerRequest.java; sourceTree = "<group>"; };
+		3C97582F18252E4900222CBB /* DisplayPowerState.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayPowerState.java; sourceTree = "<group>"; };
+		3C97583018252E4900222CBB /* ElectronBeam.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ElectronBeam.java; sourceTree = "<group>"; };
+		3C97583118252E4900222CBB /* Notifier.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Notifier.java; sourceTree = "<group>"; };
+		3C97583218252E4900222CBB /* PowerManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PowerManagerService.java; sourceTree = "<group>"; };
+		3C97583318252E4900222CBB /* RampAnimator.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = RampAnimator.java; sourceTree = "<group>"; };
+		3C97583418252E4900222CBB /* ScreenOnBlocker.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ScreenOnBlocker.java; sourceTree = "<group>"; };
+		3C97583518252E4900222CBB /* ShutdownThread.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ShutdownThread.java; sourceTree = "<group>"; };
+		3C97583618252E4900222CBB /* SuspendBlocker.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SuspendBlocker.java; sourceTree = "<group>"; };
+		3C97583718252E4A00222CBB /* WirelessChargerDetector.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WirelessChargerDetector.java; sourceTree = "<group>"; };
+		3C97583818252E4A00222CBB /* PreferredComponent.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PreferredComponent.java; sourceTree = "<group>"; };
+		3C97583918252E4A00222CBB /* ProcessMap.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ProcessMap.java; sourceTree = "<group>"; };
+		3C97583A18252E4A00222CBB /* RandomBlock.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = RandomBlock.java; sourceTree = "<group>"; };
+		3C97583B18252E4A00222CBB /* RecognitionManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = RecognitionManagerService.java; sourceTree = "<group>"; };
+		3C97583C18252E4A00222CBB /* SamplingProfilerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SamplingProfilerService.java; sourceTree = "<group>"; };
+		3C97583E18252E4A00222CBB /* Searchables.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Searchables.java; sourceTree = "<group>"; };
+		3C97583F18252E4A00222CBB /* SearchManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SearchManagerService.java; sourceTree = "<group>"; };
+		3C97584018252E4A00222CBB /* SerialService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SerialService.java; sourceTree = "<group>"; };
+		3C97584118252E4A00222CBB /* ServiceWatcher.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ServiceWatcher.java; sourceTree = "<group>"; };
+		3C97584218252E4A00222CBB /* ShutdownActivity.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ShutdownActivity.java; sourceTree = "<group>"; };
+		3C97584318252E4A00222CBB /* StatusBarManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = StatusBarManagerService.java; sourceTree = "<group>"; };
+		3C97584418252E4A00222CBB /* SystemBackupAgent.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SystemBackupAgent.java; sourceTree = "<group>"; };
+		3C97584518252E4A00222CBB /* SystemServer.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SystemServer.java; sourceTree = "<group>"; };
+		3C97584618252E4A00222CBB /* TelephonyRegistry.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = TelephonyRegistry.java; sourceTree = "<group>"; };
+		3C97584718252E4A00222CBB /* TextServicesManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = TextServicesManagerService.java; sourceTree = "<group>"; };
+		3C97584818252E4A00222CBB /* TwilightCalculator.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = TwilightCalculator.java; sourceTree = "<group>"; };
+		3C97584918252E4A00222CBB /* TwilightService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = TwilightService.java; sourceTree = "<group>"; };
+		3C97584A18252E4A00222CBB /* UiModeManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UiModeManagerService.java; sourceTree = "<group>"; };
+		3C97584B18252E4A00222CBB /* UpdateLockService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UpdateLockService.java; sourceTree = "<group>"; };
+		3C97584D18252E4A00222CBB /* CertPinInstallReceiver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CertPinInstallReceiver.java; sourceTree = "<group>"; };
+		3C97584E18252E4A00222CBB /* ConfigUpdateInstallReceiver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ConfigUpdateInstallReceiver.java; sourceTree = "<group>"; };
+		3C97584F18252E4A00222CBB /* IntentFirewallInstallReceiver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = IntentFirewallInstallReceiver.java; sourceTree = "<group>"; };
+		3C97585018252E4A00222CBB /* SELinuxPolicyInstallReceiver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SELinuxPolicyInstallReceiver.java; sourceTree = "<group>"; };
+		3C97585118252E4A00222CBB /* SmsShortCodesInstallReceiver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SmsShortCodesInstallReceiver.java; sourceTree = "<group>"; };
+		3C97585218252E4A00222CBB /* TZInfoInstallReceiver.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = TZInfoInstallReceiver.java; sourceTree = "<group>"; };
+		3C97585418252E4A00222CBB /* UsbDebuggingManager.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UsbDebuggingManager.java; sourceTree = "<group>"; };
+		3C97585518252E4A00222CBB /* UsbDeviceManager.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UsbDeviceManager.java; sourceTree = "<group>"; };
+		3C97585618252E4A00222CBB /* UsbHostManager.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UsbHostManager.java; sourceTree = "<group>"; };
+		3C97585718252E4A00222CBB /* UsbService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UsbService.java; sourceTree = "<group>"; };
+		3C97585818252E4A00222CBB /* UsbSettingsManager.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UsbSettingsManager.java; sourceTree = "<group>"; };
+		3C97585918252E4A00222CBB /* VibratorService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = VibratorService.java; sourceTree = "<group>"; };
+		3C97585A18252E4A00222CBB /* WallpaperManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WallpaperManagerService.java; sourceTree = "<group>"; };
+		3C97585B18252E4A00222CBB /* Watchdog.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Watchdog.java; sourceTree = "<group>"; };
+		3C97585D18252E4A00222CBB /* README.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = README.txt; sourceTree = "<group>"; };
+		3C97585E18252E4A00222CBB /* WifiController.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WifiController.java; sourceTree = "<group>"; };
+		3C97585F18252E4A00222CBB /* WifiNotificationController.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WifiNotificationController.java; sourceTree = "<group>"; };
+		3C97586018252E4A00222CBB /* WifiService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WifiService.java; sourceTree = "<group>"; };
+		3C97586118252E4A00222CBB /* WifiSettingsStore.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WifiSettingsStore.java; sourceTree = "<group>"; };
+		3C97586218252E4A00222CBB /* WifiTrafficPoller.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WifiTrafficPoller.java; sourceTree = "<group>"; };
+		3C97586318252E4A00222CBB /* WiredAccessoryManager.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WiredAccessoryManager.java; sourceTree = "<group>"; };
+		3C97586518252E4A00222CBB /* AppTransition.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppTransition.java; sourceTree = "<group>"; };
+		3C97586618252E4A00222CBB /* AppWindowAnimator.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppWindowAnimator.java; sourceTree = "<group>"; };
+		3C97586718252E4A00222CBB /* AppWindowToken.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AppWindowToken.java; sourceTree = "<group>"; };
+		3C97586818252E4A00222CBB /* BlackFrame.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BlackFrame.java; sourceTree = "<group>"; };
+		3C97586918252E4A00222CBB /* DimLayer.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DimLayer.java; sourceTree = "<group>"; };
+		3C97586A18252E4A00222CBB /* DisplayContent.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayContent.java; sourceTree = "<group>"; };
+		3C97586B18252E4A00222CBB /* DisplayMagnifier.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplayMagnifier.java; sourceTree = "<group>"; };
+		3C97586C18252E4A00222CBB /* DisplaySettings.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DisplaySettings.java; sourceTree = "<group>"; };
+		3C97586D18252E4A00222CBB /* DragState.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DragState.java; sourceTree = "<group>"; };
+		3C97586E18252E4A00222CBB /* FakeWindowImpl.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = FakeWindowImpl.java; sourceTree = "<group>"; };
+		3C97586F18252E4A00222CBB /* InputMonitor.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = InputMonitor.java; sourceTree = "<group>"; };
+		3C97587018252E4A00222CBB /* KeyguardDisableHandler.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = KeyguardDisableHandler.java; sourceTree = "<group>"; };
+		3C97587118252E4A00222CBB /* ScreenRotationAnimation.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ScreenRotationAnimation.java; sourceTree = "<group>"; };
+		3C97587218252E4A00222CBB /* Session.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Session.java; sourceTree = "<group>"; };
+		3C97587318252E4A00222CBB /* StartingData.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = StartingData.java; sourceTree = "<group>"; };
+		3C97587418252E4A00222CBB /* StrictModeFlash.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = StrictModeFlash.java; sourceTree = "<group>"; };
+		3C97587518252E4A00222CBB /* ViewServer.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ViewServer.java; sourceTree = "<group>"; };
+		3C97587618252E4A00222CBB /* Watermark.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = Watermark.java; sourceTree = "<group>"; };
+		3C97587718252E4A00222CBB /* WindowAnimator.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WindowAnimator.java; sourceTree = "<group>"; };
+		3C97587818252E4A00222CBB /* WindowManagerService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WindowManagerService.java; sourceTree = "<group>"; };
+		3C97587918252E4A00222CBB /* WindowState.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WindowState.java; sourceTree = "<group>"; };
+		3C97587A18252E4A00222CBB /* WindowStateAnimator.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WindowStateAnimator.java; sourceTree = "<group>"; };
+		3C97587B18252E4A00222CBB /* WindowToken.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = WindowToken.java; sourceTree = "<group>"; };
+		3C97587D18252E4A00222CBB /* Android.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = Android.mk; sourceTree = "<group>"; };
+		3C97587E18252E4A00222CBB /* com_android_server_AlarmManagerService.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_AlarmManagerService.cpp; sourceTree = "<group>"; };
+		3C97587F18252E4A00222CBB /* com_android_server_BatteryService.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_BatteryService.cpp; sourceTree = "<group>"; };
+		3C97588018252E4A00222CBB /* com_android_server_connectivity_Vpn.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_connectivity_Vpn.cpp; sourceTree = "<group>"; };
+		3C97588118252E4A00222CBB /* com_android_server_input_InputApplicationHandle.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_input_InputApplicationHandle.cpp; sourceTree = "<group>"; };
+		3C97588218252E4A00222CBB /* com_android_server_input_InputApplicationHandle.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = com_android_server_input_InputApplicationHandle.h; sourceTree = "<group>"; };
+		3C97588318252E4A00222CBB /* com_android_server_input_InputManagerService.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_input_InputManagerService.cpp; sourceTree = "<group>"; };
+		3C97588418252E4A00222CBB /* com_android_server_input_InputWindowHandle.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_input_InputWindowHandle.cpp; sourceTree = "<group>"; };
+		3C97588518252E4A00222CBB /* com_android_server_input_InputWindowHandle.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = com_android_server_input_InputWindowHandle.h; sourceTree = "<group>"; };
+		3C97588618252E4A00222CBB /* com_android_server_LightsService.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_LightsService.cpp; sourceTree = "<group>"; };
+		3C97588718252E4A00222CBB /* com_android_server_location_GpsLocationProvider.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_location_GpsLocationProvider.cpp; sourceTree = "<group>"; };
+		3C97588818252E4A00222CBB /* com_android_server_power_PowerManagerService.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_power_PowerManagerService.cpp; sourceTree = "<group>"; };
+		3C97588918252E4A00222CBB /* com_android_server_power_PowerManagerService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = com_android_server_power_PowerManagerService.h; sourceTree = "<group>"; };
+		3C97588A18252E4A00222CBB /* com_android_server_SerialService.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_SerialService.cpp; sourceTree = "<group>"; };
+		3C97588B18252E4A00222CBB /* com_android_server_SystemServer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_SystemServer.cpp; sourceTree = "<group>"; };
+		3C97588C18252E4A00222CBB /* com_android_server_UsbDeviceManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_UsbDeviceManager.cpp; sourceTree = "<group>"; };
+		3C97588D18252E4A00222CBB /* com_android_server_UsbHostManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_UsbHostManager.cpp; sourceTree = "<group>"; };
+		3C97588E18252E4A00222CBB /* com_android_server_VibratorService.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = com_android_server_VibratorService.cpp; sourceTree = "<group>"; };
+		3C97588F18252E4A00222CBB /* onload.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = onload.cpp; sourceTree = "<group>"; };
+		3C97589118252E4A00222CBB /* platform.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = platform.xcodeproj; sourceTree = "<group>"; };
+		3C97589618252E4A00222CBB /* Android.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = Android.mk; sourceTree = "<group>"; };
+		3C97589718252E4A00222CBB /* AndroidManifest.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = AndroidManifest.xml; sourceTree = "<group>"; };
+		3C97589A18252E4A00222CBB /* netstats_uid_v4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = netstats_uid_v4; sourceTree = "<group>"; };
+		3C97589B18252E4A00222CBB /* netstats_v1 */ = {isa = PBXFileReference; lastKnownFileType = file; path = netstats_v1; sourceTree = "<group>"; };
+		3C97589C18252E4A00222CBB /* test1.obb */ = {isa = PBXFileReference; lastKnownFileType = file; path = test1.obb; sourceTree = "<group>"; };
+		3C97589D18252E4A00222CBB /* test1_nosig.obb */ = {isa = PBXFileReference; lastKnownFileType = file; path = test1_nosig.obb; sourceTree = "<group>"; };
+		3C97589E18252E4A00222CBB /* test1_wrongpackage.obb */ = {isa = PBXFileReference; lastKnownFileType = file; path = test1_wrongpackage.obb; sourceTree = "<group>"; };
+		3C9758A318252E4A00222CBB /* AccessibilityManagerServiceTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AccessibilityManagerServiceTest.java; sourceTree = "<group>"; };
+		3C9758A418252E4A00222CBB /* AccessibilityManagerTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AccessibilityManagerTest.java; sourceTree = "<group>"; };
+		3C9758A618252E4A00222CBB /* AccountManagerServiceTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = AccountManagerServiceTest.java; sourceTree = "<group>"; };
+		3C9758A718252E4A00222CBB /* BroadcastInterceptingContext.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = BroadcastInterceptingContext.java; sourceTree = "<group>"; };
+		3C9758A818252E4A00222CBB /* CertBlacklisterTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CertBlacklisterTest.java; sourceTree = "<group>"; };
+		3C9758A918252E4A00222CBB /* ConnectivityServiceTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ConnectivityServiceTest.java; sourceTree = "<group>"; };
+		3C9758AB18252E4A00222CBB /* ObserverNodeTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ObserverNodeTest.java; sourceTree = "<group>"; };
+		3C9758AC18252E4A00222CBB /* SyncOperationTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SyncOperationTest.java; sourceTree = "<group>"; };
+		3C9758AD18252E4A00222CBB /* SyncStorageEngineTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SyncStorageEngineTest.java; sourceTree = "<group>"; };
+		3C9758AE18252E4A00222CBB /* CountryDetectorServiceTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CountryDetectorServiceTest.java; sourceTree = "<group>"; };
+		3C9758AF18252E4A00222CBB /* DropBoxTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = DropBoxTest.java; sourceTree = "<group>"; };
+		3C9758B018252E4A00222CBB /* EntropyMixerTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = EntropyMixerTest.java; sourceTree = "<group>"; };
+		3C9758B218252E4A00222CBB /* ComprehensiveCountryDetectorTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = ComprehensiveCountryDetectorTest.java; sourceTree = "<group>"; };
+		3C9758B318252E4A00222CBB /* LocationBasedCountryDetectorTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = LocationBasedCountryDetectorTest.java; sourceTree = "<group>"; };
+		3C9758B418252E4A00222CBB /* MockAccessibilityService.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = MockAccessibilityService.java; sourceTree = "<group>"; };
+		3C9758B518252E4A00222CBB /* MountServiceTests.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = MountServiceTests.java; sourceTree = "<group>"; };
+		3C9758B618252E4A00222CBB /* NativeDaemonConnectorTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NativeDaemonConnectorTest.java; sourceTree = "<group>"; };
+		3C9758B818252E4A00222CBB /* NetworkStatsCollectionTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NetworkStatsCollectionTest.java; sourceTree = "<group>"; };
+		3C9758B918252E4A00222CBB /* NetworkPolicyManagerServiceTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NetworkPolicyManagerServiceTest.java; sourceTree = "<group>"; };
+		3C9758BA18252E4A00222CBB /* NetworkStatsServiceTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = NetworkStatsServiceTest.java; sourceTree = "<group>"; };
+		3C9758BC18252E4A00222CBB /* PackageManagerSettingsTests.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PackageManagerSettingsTests.java; sourceTree = "<group>"; };
+		3C9758BD18252E4A00222CBB /* PackageVerificationStateTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = PackageVerificationStateTest.java; sourceTree = "<group>"; };
+		3C9758BE18252E4A00222CBB /* UserManagerTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = UserManagerTest.java; sourceTree = "<group>"; };
+		3C9758C018252E4A00222CBB /* SearchablesTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = SearchablesTest.java; sourceTree = "<group>"; };
+		3C9758C218252E4A00222CBB /* CertPinInstallReceiverTest.java */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.java; path = CertPinInstallReceiverTest.java; sourceTree = "<group>"; };
+		3C9758C318252E4A00222CBB /* Untitled.xcworkspace */ = {isa = PBXFileReference; lastKnownFileType = wrapper.workspace; path = Untitled.xcworkspace; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3C97573518252E2800222CBB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		3C97572F18252E2700222CBB = {
+			isa = PBXGroup;
+			children = (
+				3C97573F18252E4900222CBB /* services */,
+				3C97573918252E2800222CBB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		3C97573918252E2800222CBB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3C97573818252E2800222CBB /* libplatform.dylib */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3C97573F18252E4900222CBB /* services */ = {
+			isa = PBXGroup;
+			children = (
+				3C97574018252E4900222CBB /* common_time */,
+				3C97575418252E4900222CBB /* input */,
+				3C97576C18252E4900222CBB /* java */,
+				3C97587C18252E4A00222CBB /* jni */,
+				3C97589018252E4A00222CBB /* platform */,
+				3C97589418252E4A00222CBB /* tests */,
+				3C9758C318252E4A00222CBB /* Untitled.xcworkspace */,
+			);
+			name = services;
+			path = ..;
+			sourceTree = "<group>";
+		};
+		3C97574018252E4900222CBB /* common_time */ = {
+			isa = PBXGroup;
+			children = (
+				3C97574118252E4900222CBB /* Android.mk */,
+				3C97574218252E4900222CBB /* clock_recovery.cpp */,
+				3C97574318252E4900222CBB /* clock_recovery.h */,
+				3C97574418252E4900222CBB /* common_clock.cpp */,
+				3C97574518252E4900222CBB /* common_clock.h */,
+				3C97574618252E4900222CBB /* common_clock_service.cpp */,
+				3C97574718252E4900222CBB /* common_clock_service.h */,
+				3C97574818252E4900222CBB /* common_time_config_service.cpp */,
+				3C97574918252E4900222CBB /* common_time_config_service.h */,
+				3C97574A18252E4900222CBB /* common_time_server.cpp */,
+				3C97574B18252E4900222CBB /* common_time_server.h */,
+				3C97574C18252E4900222CBB /* common_time_server_api.cpp */,
+				3C97574D18252E4900222CBB /* common_time_server_packets.cpp */,
+				3C97574E18252E4900222CBB /* common_time_server_packets.h */,
+				3C97574F18252E4900222CBB /* diag_thread.cpp */,
+				3C97575018252E4900222CBB /* diag_thread.h */,
+				3C97575118252E4900222CBB /* main.cpp */,
+				3C97575218252E4900222CBB /* utils.cpp */,
+				3C97575318252E4900222CBB /* utils.h */,
+			);
+			path = common_time;
+			sourceTree = "<group>";
+		};
+		3C97575418252E4900222CBB /* input */ = {
+			isa = PBXGroup;
+			children = (
+				3C97575518252E4900222CBB /* Android.mk */,
+				3C97575618252E4900222CBB /* EventHub.cpp */,
+				3C97575718252E4900222CBB /* EventHub.h */,
+				3C97575818252E4900222CBB /* InputApplication.cpp */,
+				3C97575918252E4900222CBB /* InputApplication.h */,
+				3C97575A18252E4900222CBB /* InputDispatcher.cpp */,
+				3C97575B18252E4900222CBB /* InputDispatcher.h */,
+				3C97575C18252E4900222CBB /* InputListener.cpp */,
+				3C97575D18252E4900222CBB /* InputListener.h */,
+				3C97575E18252E4900222CBB /* InputManager.cpp */,
+				3C97575F18252E4900222CBB /* InputManager.h */,
+				3C97576018252E4900222CBB /* InputReader.cpp */,
+				3C97576118252E4900222CBB /* InputReader.h */,
+				3C97576218252E4900222CBB /* InputWindow.cpp */,
+				3C97576318252E4900222CBB /* InputWindow.h */,
+				3C97576418252E4900222CBB /* PointerController.cpp */,
+				3C97576518252E4900222CBB /* PointerController.h */,
+				3C97576618252E4900222CBB /* SpriteController.cpp */,
+				3C97576718252E4900222CBB /* SpriteController.h */,
+				3C97576818252E4900222CBB /* tests */,
+			);
+			path = input;
+			sourceTree = "<group>";
+		};
+		3C97576818252E4900222CBB /* tests */ = {
+			isa = PBXGroup;
+			children = (
+				3C97576918252E4900222CBB /* Android.mk */,
+				3C97576A18252E4900222CBB /* InputDispatcher_test.cpp */,
+				3C97576B18252E4900222CBB /* InputReader_test.cpp */,
+			);
+			path = tests;
+			sourceTree = "<group>";
+		};
+		3C97576C18252E4900222CBB /* java */ = {
+			isa = PBXGroup;
+			children = (
+				3C97576D18252E4900222CBB /* Android.mk */,
+				3C97576E18252E4900222CBB /* com */,
+			);
+			path = java;
+			sourceTree = "<group>";
+		};
+		3C97576E18252E4900222CBB /* com */ = {
+			isa = PBXGroup;
+			children = (
+				3C97576F18252E4900222CBB /* android */,
+			);
+			path = com;
+			sourceTree = "<group>";
+		};
+		3C97576F18252E4900222CBB /* android */ = {
+			isa = PBXGroup;
+			children = (
+				3C97577018252E4900222CBB /* server */,
+			);
+			path = android;
+			sourceTree = "<group>";
+		};
+		3C97577018252E4900222CBB /* server */ = {
+			isa = PBXGroup;
+			children = (
+				3C97577118252E4900222CBB /* accessibility */,
+				3C97577818252E4900222CBB /* accounts */,
+				3C97577C18252E4900222CBB /* AlarmManagerService.java */,
+				3C97577D18252E4900222CBB /* am */,
+				3C9757AB18252E4900222CBB /* AppOpsService.java */,
+				3C9757AC18252E4900222CBB /* AppWidgetService.java */,
+				3C9757AD18252E4900222CBB /* AppWidgetServiceImpl.java */,
+				3C9757AE18252E4900222CBB /* AttributeCache.java */,
+				3C9757AF18252E4900222CBB /* BackupManagerService.java */,
+				3C9757B018252E4900222CBB /* BatteryService.java */,
+				3C9757B118252E4900222CBB /* BluetoothManagerService.java */,
+				3C9757B218252E4900222CBB /* BootReceiver.java */,
+				3C9757B318252E4900222CBB /* BrickReceiver.java */,
+				3C9757B418252E4900222CBB /* CertBlacklister.java */,
+				3C9757B518252E4900222CBB /* ClipboardService.java */,
+				3C9757B618252E4900222CBB /* CommonTimeManagementService.java */,
+				3C9757B718252E4900222CBB /* connectivity */,
+				3C9757BB18252E4900222CBB /* ConnectivityService.java */,
+				3C9757BC18252E4900222CBB /* content */,
+				3C9757C218252E4900222CBB /* CountryDetectorService.java */,
+				3C9757C318252E4900222CBB /* DevicePolicyManagerService.java */,
+				3C9757C418252E4900222CBB /* DeviceStorageMonitorService.java */,
+				3C9757C518252E4900222CBB /* DiskStatsService.java */,
+				3C9757C618252E4900222CBB /* display */,
+				3C9757D518252E4900222CBB /* DockObserver.java */,
+				3C9757D618252E4900222CBB /* dreams */,
+				3C9757D918252E4900222CBB /* DropBoxManagerService.java */,
+				3C9757DA18252E4900222CBB /* EntropyMixer.java */,
+				3C9757DB18252E4900222CBB /* EventLogTags.logtags */,
+				3C9757DC18252E4900222CBB /* firewall */,
+				3C9757E918252E4900222CBB /* IdleMaintenanceService.java */,
+				3C9757EA18252E4900222CBB /* INativeDaemonConnectorCallbacks.java */,
+				3C9757EB18252E4900222CBB /* input */,
+				3C9757F018252E4900222CBB /* InputMethodManagerService.java */,
+				3C9757F118252E4900222CBB /* IntentResolver.java */,
+				3C9757F218252E4900222CBB /* IntentResolverOld.java */,
+				3C9757F318252E4900222CBB /* LightsService.java */,
+				3C9757F418252E4900222CBB /* location */,
+				3C97580418252E4900222CBB /* LocationManagerService.java */,
+				3C97580518252E4900222CBB /* LockSettingsService.java */,
+				3C97580618252E4900222CBB /* MasterClearReceiver.java */,
+				3C97580718252E4900222CBB /* MountService.java */,
+				3C97580818252E4900222CBB /* NativeDaemonConnector.java */,
+				3C97580918252E4900222CBB /* NativeDaemonConnectorException.java */,
+				3C97580A18252E4900222CBB /* NativeDaemonEvent.java */,
+				3C97580B18252E4900222CBB /* net */,
+				3C97581318252E4900222CBB /* NetworkManagementService.java */,
+				3C97581418252E4900222CBB /* NetworkTimeUpdateService.java */,
+				3C97581518252E4900222CBB /* NotificationManagerService.java */,
+				3C97581618252E4900222CBB /* NsdService.java */,
+				3C97581718252E4900222CBB /* os */,
+				3C97581918252E4900222CBB /* PackageManagerBackupAgent.java */,
+				3C97581A18252E4900222CBB /* pm */,
+				3C97582B18252E4900222CBB /* power */,
+				3C97583818252E4A00222CBB /* PreferredComponent.java */,
+				3C97583918252E4A00222CBB /* ProcessMap.java */,
+				3C97583A18252E4A00222CBB /* RandomBlock.java */,
+				3C97583B18252E4A00222CBB /* RecognitionManagerService.java */,
+				3C97583C18252E4A00222CBB /* SamplingProfilerService.java */,
+				3C97583D18252E4A00222CBB /* search */,
+				3C97584018252E4A00222CBB /* SerialService.java */,
+				3C97584118252E4A00222CBB /* ServiceWatcher.java */,
+				3C97584218252E4A00222CBB /* ShutdownActivity.java */,
+				3C97584318252E4A00222CBB /* StatusBarManagerService.java */,
+				3C97584418252E4A00222CBB /* SystemBackupAgent.java */,
+				3C97584518252E4A00222CBB /* SystemServer.java */,
+				3C97584618252E4A00222CBB /* TelephonyRegistry.java */,
+				3C97584718252E4A00222CBB /* TextServicesManagerService.java */,
+				3C97584818252E4A00222CBB /* TwilightCalculator.java */,
+				3C97584918252E4A00222CBB /* TwilightService.java */,
+				3C97584A18252E4A00222CBB /* UiModeManagerService.java */,
+				3C97584B18252E4A00222CBB /* UpdateLockService.java */,
+				3C97584C18252E4A00222CBB /* updates */,
+				3C97585318252E4A00222CBB /* usb */,
+				3C97585918252E4A00222CBB /* VibratorService.java */,
+				3C97585A18252E4A00222CBB /* WallpaperManagerService.java */,
+				3C97585B18252E4A00222CBB /* Watchdog.java */,
+				3C97585C18252E4A00222CBB /* wifi */,
+				3C97586318252E4A00222CBB /* WiredAccessoryManager.java */,
+				3C97586418252E4A00222CBB /* wm */,
+			);
+			path = server;
+			sourceTree = "<group>";
+		};
+		3C97577118252E4900222CBB /* accessibility */ = {
+			isa = PBXGroup;
+			children = (
+				3C97577218252E4900222CBB /* AccessibilityInputFilter.java */,
+				3C97577318252E4900222CBB /* AccessibilityManagerService.java */,
+				3C97577418252E4900222CBB /* EventStreamTransformation.java */,
+				3C97577518252E4900222CBB /* GestureUtils.java */,
+				3C97577618252E4900222CBB /* ScreenMagnifier.java */,
+				3C97577718252E4900222CBB /* TouchExplorer.java */,
+			);
+			path = accessibility;
+			sourceTree = "<group>";
+		};
+		3C97577818252E4900222CBB /* accounts */ = {
+			isa = PBXGroup;
+			children = (
+				3C97577918252E4900222CBB /* AccountAuthenticatorCache.java */,
+				3C97577A18252E4900222CBB /* AccountManagerService.java */,
+				3C97577B18252E4900222CBB /* IAccountAuthenticatorCache.java */,
+			);
+			path = accounts;
+			sourceTree = "<group>";
+		};
+		3C97577D18252E4900222CBB /* am */ = {
+			isa = PBXGroup;
+			children = (
+				3C97577E18252E4900222CBB /* ActiveServices.java */,
+				3C97577F18252E4900222CBB /* ActivityManagerService.java */,
+				3C97578018252E4900222CBB /* ActivityRecord.java */,
+				3C97578118252E4900222CBB /* ActivityResult.java */,
+				3C97578218252E4900222CBB /* ActivityStack.java */,
+				3C97578318252E4900222CBB /* AppBindRecord.java */,
+				3C97578418252E4900222CBB /* AppErrorDialog.java */,
+				3C97578518252E4900222CBB /* AppErrorResult.java */,
+				3C97578618252E4900222CBB /* AppNotRespondingDialog.java */,
+				3C97578718252E4900222CBB /* AppWaitingForDebuggerDialog.java */,
+				3C97578818252E4900222CBB /* BackupRecord.java */,
+				3C97578918252E4900222CBB /* BaseErrorDialog.java */,
+				3C97578A18252E4900222CBB /* BatteryStatsService.java */,
+				3C97578B18252E4900222CBB /* BroadcastFilter.java */,
+				3C97578C18252E4900222CBB /* BroadcastQueue.java */,
+				3C97578D18252E4900222CBB /* BroadcastRecord.java */,
+				3C97578E18252E4900222CBB /* CompatModeDialog.java */,
+				3C97578F18252E4900222CBB /* CompatModePackages.java */,
+				3C97579018252E4900222CBB /* ConnectionRecord.java */,
+				3C97579118252E4900222CBB /* ContentProviderConnection.java */,
+				3C97579218252E4900222CBB /* ContentProviderRecord.java */,
+				3C97579318252E4900222CBB /* CoreSettingsObserver.java */,
+				3C97579418252E4900222CBB /* DeviceMonitor.java */,
+				3C97579518252E4900222CBB /* EventLogTags.logtags */,
+				3C97579618252E4900222CBB /* FactoryErrorDialog.java */,
+				3C97579718252E4900222CBB /* IntentBindRecord.java */,
+				3C97579818252E4900222CBB /* LaunchWarningWindow.java */,
+				3C97579918252E4900222CBB /* NativeCrashListener.java */,
+				3C97579A18252E4900222CBB /* package.html */,
+				3C97579B18252E4900222CBB /* PendingIntentRecord.java */,
+				3C97579C18252E4900222CBB /* PendingThumbnailsRecord.java */,
+				3C97579D18252E4900222CBB /* ProcessList.java */,
+				3C97579E18252E4900222CBB /* ProcessRecord.java */,
+				3C97579F18252E4900222CBB /* ProviderMap.java */,
+				3C9757A018252E4900222CBB /* ReceiverList.java */,
+				3C9757A118252E4900222CBB /* ServiceRecord.java */,
+				3C9757A218252E4900222CBB /* StrictModeViolationDialog.java */,
+				3C9757A318252E4900222CBB /* TaskAccessInfo.java */,
+				3C9757A418252E4900222CBB /* TaskRecord.java */,
+				3C9757A518252E4900222CBB /* ThumbnailHolder.java */,
+				3C9757A618252E4900222CBB /* TransferPipe.java */,
+				3C9757A718252E4900222CBB /* UriPermission.java */,
+				3C9757A818252E4900222CBB /* UriPermissionOwner.java */,
+				3C9757A918252E4900222CBB /* UsageStatsService.java */,
+				3C9757AA18252E4900222CBB /* UserStartedState.java */,
+			);
+			path = am;
+			sourceTree = "<group>";
+		};
+		3C9757B718252E4900222CBB /* connectivity */ = {
+			isa = PBXGroup;
+			children = (
+				3C9757B818252E4900222CBB /* Nat464Xlat.java */,
+				3C9757B918252E4900222CBB /* Tethering.java */,
+				3C9757BA18252E4900222CBB /* Vpn.java */,
+			);
+			path = connectivity;
+			sourceTree = "<group>";
+		};
+		3C9757BC18252E4900222CBB /* content */ = {
+			isa = PBXGroup;
+			children = (
+				3C9757BD18252E4900222CBB /* ContentService.java */,
+				3C9757BE18252E4900222CBB /* SyncManager.java */,
+				3C9757BF18252E4900222CBB /* SyncOperation.java */,
+				3C9757C018252E4900222CBB /* SyncQueue.java */,
+				3C9757C118252E4900222CBB /* SyncStorageEngine.java */,
+			);
+			path = content;
+			sourceTree = "<group>";
+		};
+		3C9757C618252E4900222CBB /* display */ = {
+			isa = PBXGroup;
+			children = (
+				3C9757C718252E4900222CBB /* DisplayAdapter.java */,
+				3C9757C818252E4900222CBB /* DisplayDevice.java */,
+				3C9757C918252E4900222CBB /* DisplayDeviceInfo.java */,
+				3C9757CA18252E4900222CBB /* DisplayManagerService.java */,
+				3C9757CB18252E4900222CBB /* DisplayTransactionListener.java */,
+				3C9757CC18252E4900222CBB /* DisplayViewport.java */,
+				3C9757CD18252E4900222CBB /* HeadlessDisplayAdapter.java */,
+				3C9757CE18252E4900222CBB /* LocalDisplayAdapter.java */,
+				3C9757CF18252E4900222CBB /* LogicalDisplay.java */,
+				3C9757D018252E4900222CBB /* OverlayDisplayAdapter.java */,
+				3C9757D118252E4900222CBB /* OverlayDisplayWindow.java */,
+				3C9757D218252E4900222CBB /* PersistentDataStore.java */,
+				3C9757D318252E4900222CBB /* WifiDisplayAdapter.java */,
+				3C9757D418252E4900222CBB /* WifiDisplayController.java */,
+			);
+			path = display;
+			sourceTree = "<group>";
+		};
+		3C9757D618252E4900222CBB /* dreams */ = {
+			isa = PBXGroup;
+			children = (
+				3C9757D718252E4900222CBB /* DreamController.java */,
+				3C9757D818252E4900222CBB /* DreamManagerService.java */,
+			);
+			path = dreams;
+			sourceTree = "<group>";
+		};
+		3C9757DC18252E4900222CBB /* firewall */ = {
+			isa = PBXGroup;
+			children = (
+				3C9757DD18252E4900222CBB /* AndFilter.java */,
+				3C9757DE18252E4900222CBB /* CategoryFilter.java */,
+				3C9757DF18252E4900222CBB /* Filter.java */,
+				3C9757E018252E4900222CBB /* FilterFactory.java */,
+				3C9757E118252E4900222CBB /* FilterList.java */,
+				3C9757E218252E4900222CBB /* IntentFirewall.java */,
+				3C9757E318252E4900222CBB /* NotFilter.java */,
+				3C9757E418252E4900222CBB /* OrFilter.java */,
+				3C9757E518252E4900222CBB /* PortFilter.java */,
+				3C9757E618252E4900222CBB /* SenderFilter.java */,
+				3C9757E718252E4900222CBB /* SenderPermissionFilter.java */,
+				3C9757E818252E4900222CBB /* StringFilter.java */,
+			);
+			path = firewall;
+			sourceTree = "<group>";
+		};
+		3C9757EB18252E4900222CBB /* input */ = {
+			isa = PBXGroup;
+			children = (
+				3C9757EC18252E4900222CBB /* InputApplicationHandle.java */,
+				3C9757ED18252E4900222CBB /* InputManagerService.java */,
+				3C9757EE18252E4900222CBB /* InputWindowHandle.java */,
+				3C9757EF18252E4900222CBB /* PersistentDataStore.java */,
+			);
+			path = input;
+			sourceTree = "<group>";
+		};
+		3C9757F418252E4900222CBB /* location */ = {
+			isa = PBXGroup;
+			children = (
+				3C9757F518252E4900222CBB /* ComprehensiveCountryDetector.java */,
+				3C9757F618252E4900222CBB /* CountryDetectorBase.java */,
+				3C9757F718252E4900222CBB /* GeocoderProxy.java */,
+				3C9757F818252E4900222CBB /* GeofenceManager.java */,
+				3C9757F918252E4900222CBB /* GeofenceProxy.java */,
+				3C9757FA18252E4900222CBB /* GeofenceState.java */,
+				3C9757FB18252E4900222CBB /* GpsLocationProvider.java */,
+				3C9757FC18252E4900222CBB /* GpsXtraDownloader.java */,
+				3C9757FD18252E4900222CBB /* LocationBasedCountryDetector.java */,
+				3C9757FE18252E4900222CBB /* LocationBlacklist.java */,
+				3C9757FF18252E4900222CBB /* LocationFudger.java */,
+				3C97580018252E4900222CBB /* LocationProviderInterface.java */,
+				3C97580118252E4900222CBB /* LocationProviderProxy.java */,
+				3C97580218252E4900222CBB /* MockProvider.java */,
+				3C97580318252E4900222CBB /* PassiveProvider.java */,
+			);
+			path = location;
+			sourceTree = "<group>";
+		};
+		3C97580B18252E4900222CBB /* net */ = {
+			isa = PBXGroup;
+			children = (
+				3C97580C18252E4900222CBB /* BaseNetworkObserver.java */,
+				3C97580D18252E4900222CBB /* LockdownVpnTracker.java */,
+				3C97580E18252E4900222CBB /* NetworkIdentitySet.java */,
+				3C97580F18252E4900222CBB /* NetworkPolicyManagerService.java */,
+				3C97581018252E4900222CBB /* NetworkStatsCollection.java */,
+				3C97581118252E4900222CBB /* NetworkStatsRecorder.java */,
+				3C97581218252E4900222CBB /* NetworkStatsService.java */,
+			);
+			path = net;
+			sourceTree = "<group>";
+		};
+		3C97581718252E4900222CBB /* os */ = {
+			isa = PBXGroup;
+			children = (
+				3C97581818252E4900222CBB /* SchedulingPolicyService.java */,
+			);
+			path = os;
+			sourceTree = "<group>";
+		};
+		3C97581A18252E4900222CBB /* pm */ = {
+			isa = PBXGroup;
+			children = (
+				3C97581B18252E4900222CBB /* BasePermission.java */,
+				3C97581C18252E4900222CBB /* GrantedPermissions.java */,
+				3C97581D18252E4900222CBB /* Installer.java */,
+				3C97581E18252E4900222CBB /* PackageManagerService.java */,
+				3C97581F18252E4900222CBB /* PackageSetting.java */,
+				3C97582018252E4900222CBB /* PackageSettingBase.java */,
+				3C97582118252E4900222CBB /* PackageSignatures.java */,
+				3C97582218252E4900222CBB /* PackageVerificationResponse.java */,
+				3C97582318252E4900222CBB /* PackageVerificationState.java */,
+				3C97582418252E4900222CBB /* PendingPackage.java */,
+				3C97582518252E4900222CBB /* PreferredActivity.java */,
+				3C97582618252E4900222CBB /* PreferredIntentResolver.java */,
+				3C97582718252E4900222CBB /* SELinuxMMAC.java */,
+				3C97582818252E4900222CBB /* Settings.java */,
+				3C97582918252E4900222CBB /* SharedUserSetting.java */,
+				3C97582A18252E4900222CBB /* UserManagerService.java */,
+			);
+			path = pm;
+			sourceTree = "<group>";
+		};
+		3C97582B18252E4900222CBB /* power */ = {
+			isa = PBXGroup;
+			children = (
+				3C97582C18252E4900222CBB /* DisplayBlanker.java */,
+				3C97582D18252E4900222CBB /* DisplayPowerController.java */,
+				3C97582E18252E4900222CBB /* DisplayPowerRequest.java */,
+				3C97582F18252E4900222CBB /* DisplayPowerState.java */,
+				3C97583018252E4900222CBB /* ElectronBeam.java */,
+				3C97583118252E4900222CBB /* Notifier.java */,
+				3C97583218252E4900222CBB /* PowerManagerService.java */,
+				3C97583318252E4900222CBB /* RampAnimator.java */,
+				3C97583418252E4900222CBB /* ScreenOnBlocker.java */,
+				3C97583518252E4900222CBB /* ShutdownThread.java */,
+				3C97583618252E4900222CBB /* SuspendBlocker.java */,
+				3C97583718252E4A00222CBB /* WirelessChargerDetector.java */,
+			);
+			path = power;
+			sourceTree = "<group>";
+		};
+		3C97583D18252E4A00222CBB /* search */ = {
+			isa = PBXGroup;
+			children = (
+				3C97583E18252E4A00222CBB /* Searchables.java */,
+				3C97583F18252E4A00222CBB /* SearchManagerService.java */,
+			);
+			path = search;
+			sourceTree = "<group>";
+		};
+		3C97584C18252E4A00222CBB /* updates */ = {
+			isa = PBXGroup;
+			children = (
+				3C97584D18252E4A00222CBB /* CertPinInstallReceiver.java */,
+				3C97584E18252E4A00222CBB /* ConfigUpdateInstallReceiver.java */,
+				3C97584F18252E4A00222CBB /* IntentFirewallInstallReceiver.java */,
+				3C97585018252E4A00222CBB /* SELinuxPolicyInstallReceiver.java */,
+				3C97585118252E4A00222CBB /* SmsShortCodesInstallReceiver.java */,
+				3C97585218252E4A00222CBB /* TZInfoInstallReceiver.java */,
+			);
+			path = updates;
+			sourceTree = "<group>";
+		};
+		3C97585318252E4A00222CBB /* usb */ = {
+			isa = PBXGroup;
+			children = (
+				3C97585418252E4A00222CBB /* UsbDebuggingManager.java */,
+				3C97585518252E4A00222CBB /* UsbDeviceManager.java */,
+				3C97585618252E4A00222CBB /* UsbHostManager.java */,
+				3C97585718252E4A00222CBB /* UsbService.java */,
+				3C97585818252E4A00222CBB /* UsbSettingsManager.java */,
+			);
+			path = usb;
+			sourceTree = "<group>";
+		};
+		3C97585C18252E4A00222CBB /* wifi */ = {
+			isa = PBXGroup;
+			children = (
+				3C97585D18252E4A00222CBB /* README.txt */,
+				3C97585E18252E4A00222CBB /* WifiController.java */,
+				3C97585F18252E4A00222CBB /* WifiNotificationController.java */,
+				3C97586018252E4A00222CBB /* WifiService.java */,
+				3C97586118252E4A00222CBB /* WifiSettingsStore.java */,
+				3C97586218252E4A00222CBB /* WifiTrafficPoller.java */,
+			);
+			path = wifi;
+			sourceTree = "<group>";
+		};
+		3C97586418252E4A00222CBB /* wm */ = {
+			isa = PBXGroup;
+			children = (
+				3C97586518252E4A00222CBB /* AppTransition.java */,
+				3C97586618252E4A00222CBB /* AppWindowAnimator.java */,
+				3C97586718252E4A00222CBB /* AppWindowToken.java */,
+				3C97586818252E4A00222CBB /* BlackFrame.java */,
+				3C97586918252E4A00222CBB /* DimLayer.java */,
+				3C97586A18252E4A00222CBB /* DisplayContent.java */,
+				3C97586B18252E4A00222CBB /* DisplayMagnifier.java */,
+				3C97586C18252E4A00222CBB /* DisplaySettings.java */,
+				3C97586D18252E4A00222CBB /* DragState.java */,
+				3C97586E18252E4A00222CBB /* FakeWindowImpl.java */,
+				3C97586F18252E4A00222CBB /* InputMonitor.java */,
+				3C97587018252E4A00222CBB /* KeyguardDisableHandler.java */,
+				3C97587118252E4A00222CBB /* ScreenRotationAnimation.java */,
+				3C97587218252E4A00222CBB /* Session.java */,
+				3C97587318252E4A00222CBB /* StartingData.java */,
+				3C97587418252E4A00222CBB /* StrictModeFlash.java */,
+				3C97587518252E4A00222CBB /* ViewServer.java */,
+				3C97587618252E4A00222CBB /* Watermark.java */,
+				3C97587718252E4A00222CBB /* WindowAnimator.java */,
+				3C97587818252E4A00222CBB /* WindowManagerService.java */,
+				3C97587918252E4A00222CBB /* WindowState.java */,
+				3C97587A18252E4A00222CBB /* WindowStateAnimator.java */,
+				3C97587B18252E4A00222CBB /* WindowToken.java */,
+			);
+			path = wm;
+			sourceTree = "<group>";
+		};
+		3C97587C18252E4A00222CBB /* jni */ = {
+			isa = PBXGroup;
+			children = (
+				3C97587D18252E4A00222CBB /* Android.mk */,
+				3C97587E18252E4A00222CBB /* com_android_server_AlarmManagerService.cpp */,
+				3C97587F18252E4A00222CBB /* com_android_server_BatteryService.cpp */,
+				3C97588018252E4A00222CBB /* com_android_server_connectivity_Vpn.cpp */,
+				3C97588118252E4A00222CBB /* com_android_server_input_InputApplicationHandle.cpp */,
+				3C97588218252E4A00222CBB /* com_android_server_input_InputApplicationHandle.h */,
+				3C97588318252E4A00222CBB /* com_android_server_input_InputManagerService.cpp */,
+				3C97588418252E4A00222CBB /* com_android_server_input_InputWindowHandle.cpp */,
+				3C97588518252E4A00222CBB /* com_android_server_input_InputWindowHandle.h */,
+				3C97588618252E4A00222CBB /* com_android_server_LightsService.cpp */,
+				3C97588718252E4A00222CBB /* com_android_server_location_GpsLocationProvider.cpp */,
+				3C97588818252E4A00222CBB /* com_android_server_power_PowerManagerService.cpp */,
+				3C97588918252E4A00222CBB /* com_android_server_power_PowerManagerService.h */,
+				3C97588A18252E4A00222CBB /* com_android_server_SerialService.cpp */,
+				3C97588B18252E4A00222CBB /* com_android_server_SystemServer.cpp */,
+				3C97588C18252E4A00222CBB /* com_android_server_UsbDeviceManager.cpp */,
+				3C97588D18252E4A00222CBB /* com_android_server_UsbHostManager.cpp */,
+				3C97588E18252E4A00222CBB /* com_android_server_VibratorService.cpp */,
+				3C97588F18252E4A00222CBB /* onload.cpp */,
+			);
+			path = jni;
+			sourceTree = "<group>";
+		};
+		3C97589018252E4A00222CBB /* platform */ = {
+			isa = PBXGroup;
+			children = (
+				3C97589118252E4A00222CBB /* platform.xcodeproj */,
+			);
+			path = platform;
+			sourceTree = "<group>";
+		};
+		3C97589218252E4A00222CBB /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3C97589418252E4A00222CBB /* tests */ = {
+			isa = PBXGroup;
+			children = (
+				3C97589518252E4A00222CBB /* servicestests */,
+			);
+			path = tests;
+			sourceTree = "<group>";
+		};
+		3C97589518252E4A00222CBB /* servicestests */ = {
+			isa = PBXGroup;
+			children = (
+				3C97589618252E4A00222CBB /* Android.mk */,
+				3C97589718252E4A00222CBB /* AndroidManifest.xml */,
+				3C97589818252E4A00222CBB /* res */,
+				3C97589F18252E4A00222CBB /* src */,
+			);
+			path = servicestests;
+			sourceTree = "<group>";
+		};
+		3C97589818252E4A00222CBB /* res */ = {
+			isa = PBXGroup;
+			children = (
+				3C97589918252E4A00222CBB /* raw */,
+			);
+			path = res;
+			sourceTree = "<group>";
+		};
+		3C97589918252E4A00222CBB /* raw */ = {
+			isa = PBXGroup;
+			children = (
+				3C97589A18252E4A00222CBB /* netstats_uid_v4 */,
+				3C97589B18252E4A00222CBB /* netstats_v1 */,
+				3C97589C18252E4A00222CBB /* test1.obb */,
+				3C97589D18252E4A00222CBB /* test1_nosig.obb */,
+				3C97589E18252E4A00222CBB /* test1_wrongpackage.obb */,
+			);
+			path = raw;
+			sourceTree = "<group>";
+		};
+		3C97589F18252E4A00222CBB /* src */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758A018252E4A00222CBB /* com */,
+			);
+			path = src;
+			sourceTree = "<group>";
+		};
+		3C9758A018252E4A00222CBB /* com */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758A118252E4A00222CBB /* android */,
+			);
+			path = com;
+			sourceTree = "<group>";
+		};
+		3C9758A118252E4A00222CBB /* android */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758A218252E4A00222CBB /* server */,
+			);
+			path = android;
+			sourceTree = "<group>";
+		};
+		3C9758A218252E4A00222CBB /* server */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758A318252E4A00222CBB /* AccessibilityManagerServiceTest.java */,
+				3C9758A418252E4A00222CBB /* AccessibilityManagerTest.java */,
+				3C9758A518252E4A00222CBB /* accounts */,
+				3C9758A718252E4A00222CBB /* BroadcastInterceptingContext.java */,
+				3C9758A818252E4A00222CBB /* CertBlacklisterTest.java */,
+				3C9758A918252E4A00222CBB /* ConnectivityServiceTest.java */,
+				3C9758AA18252E4A00222CBB /* content */,
+				3C9758AE18252E4A00222CBB /* CountryDetectorServiceTest.java */,
+				3C9758AF18252E4A00222CBB /* DropBoxTest.java */,
+				3C9758B018252E4A00222CBB /* EntropyMixerTest.java */,
+				3C9758B118252E4A00222CBB /* location */,
+				3C9758B418252E4A00222CBB /* MockAccessibilityService.java */,
+				3C9758B518252E4A00222CBB /* MountServiceTests.java */,
+				3C9758B618252E4A00222CBB /* NativeDaemonConnectorTest.java */,
+				3C9758B718252E4A00222CBB /* net */,
+				3C9758B918252E4A00222CBB /* NetworkPolicyManagerServiceTest.java */,
+				3C9758BA18252E4A00222CBB /* NetworkStatsServiceTest.java */,
+				3C9758BB18252E4A00222CBB /* pm */,
+				3C9758BF18252E4A00222CBB /* search */,
+				3C9758C118252E4A00222CBB /* updates */,
+			);
+			path = server;
+			sourceTree = "<group>";
+		};
+		3C9758A518252E4A00222CBB /* accounts */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758A618252E4A00222CBB /* AccountManagerServiceTest.java */,
+			);
+			path = accounts;
+			sourceTree = "<group>";
+		};
+		3C9758AA18252E4A00222CBB /* content */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758AB18252E4A00222CBB /* ObserverNodeTest.java */,
+				3C9758AC18252E4A00222CBB /* SyncOperationTest.java */,
+				3C9758AD18252E4A00222CBB /* SyncStorageEngineTest.java */,
+			);
+			path = content;
+			sourceTree = "<group>";
+		};
+		3C9758B118252E4A00222CBB /* location */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758B218252E4A00222CBB /* ComprehensiveCountryDetectorTest.java */,
+				3C9758B318252E4A00222CBB /* LocationBasedCountryDetectorTest.java */,
+			);
+			path = location;
+			sourceTree = "<group>";
+		};
+		3C9758B718252E4A00222CBB /* net */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758B818252E4A00222CBB /* NetworkStatsCollectionTest.java */,
+			);
+			path = net;
+			sourceTree = "<group>";
+		};
+		3C9758BB18252E4A00222CBB /* pm */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758BC18252E4A00222CBB /* PackageManagerSettingsTests.java */,
+				3C9758BD18252E4A00222CBB /* PackageVerificationStateTest.java */,
+				3C9758BE18252E4A00222CBB /* UserManagerTest.java */,
+			);
+			path = pm;
+			sourceTree = "<group>";
+		};
+		3C9758BF18252E4A00222CBB /* search */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758C018252E4A00222CBB /* SearchablesTest.java */,
+			);
+			path = search;
+			sourceTree = "<group>";
+		};
+		3C9758C118252E4A00222CBB /* updates */ = {
+			isa = PBXGroup;
+			children = (
+				3C9758C218252E4A00222CBB /* CertPinInstallReceiverTest.java */,
+			);
+			path = updates;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		3C97573618252E2800222CBB /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		3C97573718252E2800222CBB /* platform */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3C97573C18252E2800222CBB /* Build configuration list for PBXNativeTarget "platform" */;
+			buildPhases = (
+				3C97573418252E2800222CBB /* Sources */,
+				3C97573518252E2800222CBB /* Frameworks */,
+				3C97573618252E2800222CBB /* Headers */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = platform;
+			productName = platform;
+			productReference = 3C97573818252E2800222CBB /* libplatform.dylib */;
+			productType = "com.apple.product-type.library.dynamic";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3C97573018252E2700222CBB /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0460;
+				ORGANIZATIONNAME = "AutoTouch Inc.";
+			};
+			buildConfigurationList = 3C97573318252E2700222CBB /* Build configuration list for PBXProject "platform" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 3C97572F18252E2700222CBB;
+			productRefGroup = 3C97573918252E2800222CBB /* Products */;
+			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = 3C97589218252E4A00222CBB /* Products */;
+					ProjectRef = 3C97589118252E4A00222CBB /* platform.xcodeproj */;
+				},
+			);
+			projectRoot = "";
+			targets = (
+				3C97573718252E2800222CBB /* platform */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		3C97573418252E2800222CBB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		3C97573A18252E2800222CBB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		3C97573B18252E2800222CBB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		3C97573D18252E2800222CBB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		3C97573E18252E2800222CBB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3C97573318252E2700222CBB /* Build configuration list for PBXProject "platform" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3C97573A18252E2800222CBB /* Debug */,
+				3C97573B18252E2800222CBB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3C97573C18252E2800222CBB /* Build configuration list for PBXNativeTarget "platform" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3C97573D18252E2800222CBB /* Debug */,
+				3C97573E18252E2800222CBB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 3C97573018252E2700222CBB /* Project object */;
+}
