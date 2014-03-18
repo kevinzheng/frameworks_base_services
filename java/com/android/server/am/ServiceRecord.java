@@ -16,9 +16,6 @@
 
 package com.android.server.am;
 
-import android.app.PendingIntent;
-import android.net.Uri;
-import android.provider.Settings;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.server.NotificationManagerService;
 
@@ -26,16 +23,13 @@ import android.app.INotificationManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.UserHandle;
 import android.util.Slog;
 import android.util.TimeUtils;
 
@@ -66,7 +60,6 @@ class ServiceRecord extends Binder {
                             // all information about the service.
     final ApplicationInfo appInfo;
                             // information about service's app.
-    final int userId;       // user that this service is running as
     final String packageName; // the package implementing intent's component
     final String processName; // process where this component wants to run
     final String permission;// permission needed to access service
@@ -84,7 +77,6 @@ class ServiceRecord extends Binder {
                             // IBinder -> ConnectionRecord of all bound clients
 
     ProcessRecord app;      // where this service is running or null.
-    ProcessRecord isolatedProc; // keep track of isolated process, if requested
     boolean isForeground;   // is service currently in foreground mode?
     int foregroundId;       // Notification ID of last foreground req.
     Notification foregroundNoti; // Notification record of foreground state.
@@ -110,7 +102,7 @@ class ServiceRecord extends Binder {
         final boolean taskRemoved;
         final int id;
         final Intent intent;
-        final ActivityManagerService.NeededUriGrants neededGrants;
+        final int targetPermissionUid;
         long deliveredTime;
         int deliveryCount;
         int doneExecutingCount;
@@ -119,12 +111,12 @@ class ServiceRecord extends Binder {
         String stringName;      // caching of toString
 
         StartItem(ServiceRecord _sr, boolean _taskRemoved, int _id, Intent _intent,
-                ActivityManagerService.NeededUriGrants _neededGrants) {
+                int _targetPermissionUid) {
             sr = _sr;
             taskRemoved = _taskRemoved;
             id = _id;
             intent = _intent;
-            neededGrants = _neededGrants;
+            targetPermissionUid = _targetPermissionUid;
         }
 
         UriPermissionOwner getUriPermissionsLocked() {
@@ -181,9 +173,9 @@ class ServiceRecord extends Binder {
             pw.print(prefix); pw.print("  intent=");
                     if (si.intent != null) pw.println(si.intent.toString());
                     else pw.println("null");
-            if (si.neededGrants != null) {
-                pw.print(prefix); pw.print("  neededGrants=");
-                        pw.println(si.neededGrants);
+            if (si.targetPermissionUid >= 0) {
+                pw.print(prefix); pw.print("  targetPermissionUid=");
+                        pw.println(si.targetPermissionUid);
             }
             if (si.uriPermissions != null) {
                 if (si.uriPermissions.readUriPermissions != null) {
@@ -200,7 +192,7 @@ class ServiceRecord extends Binder {
     
     void dump(PrintWriter pw, String prefix) {
         pw.print(prefix); pw.print("intent={");
-                pw.print(intent.getIntent().toShortString(false, true, false, true));
+                pw.print(intent.getIntent().toShortString(false, true, false));
                 pw.println('}');
         pw.print(prefix); pw.print("packageName="); pw.println(packageName);
         pw.print(prefix); pw.print("processName="); pw.println(processName);
@@ -215,9 +207,6 @@ class ServiceRecord extends Binder {
         }
         pw.print(prefix); pw.print("dataDir="); pw.println(dataDir);
         pw.print(prefix); pw.print("app="); pw.println(app);
-        if (isolatedProc != null) {
-            pw.print(prefix); pw.print("isolatedProc="); pw.println(isolatedProc);
-        }
         if (isForeground || foregroundId != 0) {
             pw.print(prefix); pw.print("isForeground="); pw.print(isForeground);
                     pw.print(" foregroundId="); pw.print(foregroundId);
@@ -264,9 +253,6 @@ class ServiceRecord extends Binder {
                 IntentBindRecord b = it.next();
                 pw.print(prefix); pw.print("* IntentBindRecord{");
                         pw.print(Integer.toHexString(System.identityHashCode(b)));
-                        if ((b.collectFlags()&Context.BIND_AUTO_CREATE) != 0) {
-                            pw.append(" CREATE");
-                        }
                         pw.println("}:");
                 b.dumpInService(pw, prefix + "  ");
             }
@@ -303,7 +289,6 @@ class ServiceRecord extends Binder {
         this.restarter = restarter;
         createTime = SystemClock.elapsedRealtime();
         lastActivity = SystemClock.uptimeMillis();
-        userId = UserHandle.getUserId(appInfo.uid);
     }
 
     public AppBindRecord retrieveAppBindingLocked(Intent intent,
@@ -371,55 +356,9 @@ class ServiceRecord extends Binder {
                         return;
                     }
                     try {
-                        if (localForegroundNoti.icon == 0) {
-                            // It is not correct for the caller to supply a notification
-                            // icon, but this used to be able to slip through, so for
-                            // those dirty apps give it the app's icon.
-                            localForegroundNoti.icon = appInfo.icon;
-
-                            // Do not allow apps to present a sneaky invisible content view either.
-                            localForegroundNoti.contentView = null;
-                            localForegroundNoti.bigContentView = null;
-                            CharSequence appName = appInfo.loadLabel(
-                                    ams.mContext.getPackageManager());
-                            if (appName == null) {
-                                appName = appInfo.packageName;
-                            }
-                            Context ctx = null;
-                            try {
-                                ctx = ams.mContext.createPackageContext(
-                                        appInfo.packageName, 0);
-                                Intent runningIntent = new Intent(
-                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                                runningIntent.setData(Uri.fromParts("package",
-                                        appInfo.packageName, null));
-                                PendingIntent pi = PendingIntent.getActivity(ams.mContext, 0,
-                                        runningIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-                                localForegroundNoti.setLatestEventInfo(ctx,
-                                        ams.mContext.getString(
-                                                com.android.internal.R.string
-                                                        .app_running_notification_title,
-                                                appName),
-                                        ams.mContext.getString(
-                                                com.android.internal.R.string
-                                                        .app_running_notification_text,
-                                                appName),
-                                        pi);
-                            } catch (PackageManager.NameNotFoundException e) {
-                                localForegroundNoti.icon = 0;
-                            }
-                        }
-                        if (localForegroundNoti.icon == 0) {
-                            // Notifications whose icon is 0 are defined to not show
-                            // a notification, silently ignoring it.  We don't want to
-                            // just ignore it, we want to prevent the service from
-                            // being foreground.
-                            throw new RuntimeException("icon must be non-zero");
-                        }
                         int[] outId = new int[1];
-                        nm.enqueueNotificationInternal(localPackageName, localPackageName,
-                                appUid, appPid, null, localForegroundId, localForegroundNoti,
-                                outId, userId);
+                        nm.enqueueNotificationInternal(localPackageName, appUid, appPid,
+                                null, localForegroundId, localForegroundNoti, outId);
                     } catch (RuntimeException e) {
                         Slog.w(ActivityManagerService.TAG,
                                 "Error showing notification for service", e);
@@ -448,8 +387,7 @@ class ServiceRecord extends Binder {
                         return;
                     }
                     try {
-                        inm.cancelNotificationWithTag(localPackageName, null,
-                                localForegroundId, userId);
+                        inm.cancelNotification(localPackageName, localForegroundId);
                     } catch (RuntimeException e) {
                         Slog.w(ActivityManagerService.TAG,
                                 "Error canceling notification for service", e);
@@ -474,7 +412,6 @@ class ServiceRecord extends Binder {
         StringBuilder sb = new StringBuilder(128);
         sb.append("ServiceRecord{")
             .append(Integer.toHexString(System.identityHashCode(this)))
-            .append(" u").append(userId)
             .append(' ').append(shortName).append('}');
         return stringName = sb.toString();
     }

@@ -33,8 +33,6 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <linux/ioctl.h>
-#include <utils/Vector.h>
-#include <utils/String8.h>
 
 namespace android {
 
@@ -44,7 +42,6 @@ struct FieldIds {
     // members
     jfieldID mAcOnline;
     jfieldID mUsbOnline;
-    jfieldID mWirelessOnline;
     jfieldID mBatteryStatus;
     jfieldID mBatteryHealth;
     jfieldID mBatteryPresent;
@@ -72,39 +69,31 @@ struct BatteryManagerConstants {
 static BatteryManagerConstants gConstants;
 
 struct PowerSupplyPaths {
-    String8 batteryStatusPath;
-    String8 batteryHealthPath;
-    String8 batteryPresentPath;
-    String8 batteryCapacityPath;
-    String8 batteryVoltagePath;
-    String8 batteryTemperaturePath;
-    String8 batteryTechnologyPath;
+    char* acOnlinePath;
+    char* usbOnlinePath;
+    char* batteryStatusPath;
+    char* batteryHealthPath;
+    char* batteryPresentPath;
+    char* batteryCapacityPath;
+    char* batteryVoltagePath;
+    char* batteryTemperaturePath;
+    char* batteryTechnologyPath;
 };
 static PowerSupplyPaths gPaths;
 
-static Vector<String8> gChargerNames;
-
 static int gVoltageDivisor = 1;
-
-enum PowerSupplyType {
-     ANDROID_POWER_SUPPLY_TYPE_UNKNOWN = 0,
-     ANDROID_POWER_SUPPLY_TYPE_AC,
-     ANDROID_POWER_SUPPLY_TYPE_USB,
-     ANDROID_POWER_SUPPLY_TYPE_WIRELESS,
-     ANDROID_POWER_SUPPLY_TYPE_BATTERY
-};
 
 static jint getBatteryStatus(const char* status)
 {
     switch (status[0]) {
         case 'C': return gConstants.statusCharging;         // Charging
         case 'D': return gConstants.statusDischarging;      // Discharging
-        case 'F': return gConstants.statusFull;             // Full
-        case 'N': return gConstants.statusNotCharging;      // Not charging
+        case 'F': return gConstants.statusFull;             // Not charging
+        case 'N': return gConstants.statusNotCharging;      // Full
         case 'U': return gConstants.statusUnknown;          // Unknown
             
         default: {
-            ALOGW("Unknown battery status '%s'", status);
+            LOGW("Unknown battery status '%s'", status);
             return gConstants.statusUnknown;
         }
     }
@@ -122,7 +111,7 @@ static jint getBatteryHealth(const char* status)
             } else if (strcmp(status, "Over voltage") == 0) {
                 return gConstants.healthOverVoltage;
             }
-            ALOGW("Unknown battery health[1] '%s'", status);
+            LOGW("Unknown battery health[1] '%s'", status);
             return gConstants.healthUnknown;
         }
         
@@ -136,26 +125,26 @@ static jint getBatteryHealth(const char* status)
         }
             
         default: {
-            ALOGW("Unknown battery health[2] '%s'", status);
+            LOGW("Unknown battery health[2] '%s'", status);
             return gConstants.healthUnknown;
         }
     }
 }
 
-static int readFromFile(const String8& path, char* buf, size_t size)
+static int readFromFile(const char* path, char* buf, size_t size)
 {
-    if (path.isEmpty())
+    if (!path)
         return -1;
-    int fd = open(path.string(), O_RDONLY, 0);
+    int fd = open(path, O_RDONLY, 0);
     if (fd == -1) {
-        ALOGE("Could not open '%s'", path.string());
+        LOGE("Could not open '%s'", path);
         return -1;
     }
     
-    ssize_t count = read(fd, buf, size);
+    size_t count = read(fd, buf, size);
     if (count > 0) {
-        while (count > 0 && buf[count-1] == '\n')
-            count--;
+        count = (count < size) ? count : size - 1;
+        while (count > 0 && buf[count-1] == '\n') count--;
         buf[count] = '\0';
     } else {
         buf[0] = '\0';
@@ -165,7 +154,7 @@ static int readFromFile(const String8& path, char* buf, size_t size)
     return count;
 }
 
-static void setBooleanField(JNIEnv* env, jobject obj, const String8& path, jfieldID fieldID)
+static void setBooleanField(JNIEnv* env, jobject obj, const char* path, jfieldID fieldID)
 {
     const int SIZE = 16;
     char buf[SIZE];
@@ -179,7 +168,7 @@ static void setBooleanField(JNIEnv* env, jobject obj, const String8& path, jfiel
     env->SetBooleanField(obj, fieldID, value);
 }
 
-static void setIntField(JNIEnv* env, jobject obj, const String8& path, jfieldID fieldID)
+static void setIntField(JNIEnv* env, jobject obj, const char* path, jfieldID fieldID)
 {
     const int SIZE = 128;
     char buf[SIZE];
@@ -191,7 +180,7 @@ static void setIntField(JNIEnv* env, jobject obj, const String8& path, jfieldID 
     env->SetIntField(obj, fieldID, value);
 }
 
-static void setVoltageField(JNIEnv* env, jobject obj, const String8& path, jfieldID fieldID)
+static void setVoltageField(JNIEnv* env, jobject obj, const char* path, jfieldID fieldID)
 {
     const int SIZE = 128;
     char buf[SIZE];
@@ -204,30 +193,11 @@ static void setVoltageField(JNIEnv* env, jobject obj, const String8& path, jfiel
     env->SetIntField(obj, fieldID, value);
 }
 
-static PowerSupplyType readPowerSupplyType(const String8& path) {
-    const int SIZE = 128;
-    char buf[SIZE];
-    int length = readFromFile(path, buf, SIZE);
-
-    if (length <= 0)
-        return ANDROID_POWER_SUPPLY_TYPE_UNKNOWN;
-    if (buf[length - 1] == '\n')
-        buf[length - 1] = 0;
-    if (strcmp(buf, "Battery") == 0)
-        return ANDROID_POWER_SUPPLY_TYPE_BATTERY;
-    else if (strcmp(buf, "Mains") == 0 || strcmp(buf, "USB_DCP") == 0 ||
-             strcmp(buf, "USB_CDP") == 0 || strcmp(buf, "USB_ACA") == 0)
-        return ANDROID_POWER_SUPPLY_TYPE_AC;
-    else if (strcmp(buf, "USB") == 0)
-        return ANDROID_POWER_SUPPLY_TYPE_USB;
-    else if (strcmp(buf, "Wireless") == 0)
-        return ANDROID_POWER_SUPPLY_TYPE_WIRELESS;
-    else
-        return ANDROID_POWER_SUPPLY_TYPE_UNKNOWN;
-}
 
 static void android_server_BatteryService_update(JNIEnv* env, jobject obj)
 {
+    setBooleanField(env, obj, gPaths.acOnlinePath, gFieldIds.mAcOnline);
+    setBooleanField(env, obj, gPaths.usbOnlinePath, gFieldIds.mUsbOnline);
     setBooleanField(env, obj, gPaths.batteryPresentPath, gFieldIds.mBatteryPresent);
     
     setIntField(env, obj, gPaths.batteryCapacityPath, gFieldIds.mBatteryLevel);
@@ -248,161 +218,119 @@ static void android_server_BatteryService_update(JNIEnv* env, jobject obj)
 
     if (readFromFile(gPaths.batteryTechnologyPath, buf, SIZE) > 0)
         env->SetObjectField(obj, gFieldIds.mBatteryTechnology, env->NewStringUTF(buf));
-
-    unsigned int i;
-    String8 path;
-    jboolean acOnline = false;
-    jboolean usbOnline = false;
-    jboolean wirelessOnline = false;
-
-    for (i = 0; i < gChargerNames.size(); i++) {
-        path.clear();
-        path.appendFormat("%s/%s/online", POWER_SUPPLY_PATH,
-                          gChargerNames[i].string());
-
-        if (readFromFile(path, buf, SIZE) > 0) {
-            if (buf[0] != '0') {
-                path.clear();
-                path.appendFormat("%s/%s/type", POWER_SUPPLY_PATH,
-                                  gChargerNames[i].string());
-                switch(readPowerSupplyType(path)) {
-                case ANDROID_POWER_SUPPLY_TYPE_AC:
-                    acOnline = true;
-                    break;
-                case ANDROID_POWER_SUPPLY_TYPE_USB:
-                    usbOnline = true;
-                    break;
-                case ANDROID_POWER_SUPPLY_TYPE_WIRELESS:
-                    wirelessOnline = true;
-                    break;
-                default:
-                    ALOGW("%s: Unknown power supply type",
-                          gChargerNames[i].string());
-                }
-            }
-        }
-    }
-
-    env->SetBooleanField(obj, gFieldIds.mAcOnline, acOnline);
-    env->SetBooleanField(obj, gFieldIds.mUsbOnline, usbOnline);
-    env->SetBooleanField(obj, gFieldIds.mWirelessOnline, wirelessOnline);
 }
 
 static JNINativeMethod sMethods[] = {
      /* name, signature, funcPtr */
-        {"native_update", "()V", (void*)android_server_BatteryService_update},
+	{"native_update", "()V", (void*)android_server_BatteryService_update},
 };
 
 int register_android_server_BatteryService(JNIEnv* env)
 {
-    String8 path;
+    char    path[PATH_MAX];
     struct dirent* entry;
 
     DIR* dir = opendir(POWER_SUPPLY_PATH);
     if (dir == NULL) {
-        ALOGE("Could not open %s\n", POWER_SUPPLY_PATH);
-    } else {
-        while ((entry = readdir(dir))) {
-            const char* name = entry->d_name;
+        LOGE("Could not open %s\n", POWER_SUPPLY_PATH);
+        return -1;
+    }
+    while ((entry = readdir(dir))) {
+        const char* name = entry->d_name;
 
-            // ignore "." and ".."
-            if (name[0] == '.' && (name[1] == 0 || (name[1] == '.' && name[2] == 0))) {
-                continue;
+        // ignore "." and ".."
+        if (name[0] == '.' && (name[1] == 0 || (name[1] == '.' && name[2] == 0))) {
+            continue;
+        }
+
+        char buf[20];
+        // Look for "type" file in each subdirectory
+        snprintf(path, sizeof(path), "%s/%s/type", POWER_SUPPLY_PATH, name);
+        int length = readFromFile(path, buf, sizeof(buf));
+        if (length > 0) {
+            if (buf[length - 1] == '\n')
+                buf[length - 1] = 0;
+
+            if (strcmp(buf, "Mains") == 0) {
+                snprintf(path, sizeof(path), "%s/%s/online", POWER_SUPPLY_PATH, name);
+                if (access(path, R_OK) == 0)
+                    gPaths.acOnlinePath = strdup(path);
             }
+            else if (strcmp(buf, "USB") == 0) {
+                snprintf(path, sizeof(path), "%s/%s/online", POWER_SUPPLY_PATH, name);
+                if (access(path, R_OK) == 0)
+                    gPaths.usbOnlinePath = strdup(path);
+            }
+            else if (strcmp(buf, "Battery") == 0) {
+                snprintf(path, sizeof(path), "%s/%s/status", POWER_SUPPLY_PATH, name);
+                if (access(path, R_OK) == 0)
+                    gPaths.batteryStatusPath = strdup(path);
+                snprintf(path, sizeof(path), "%s/%s/health", POWER_SUPPLY_PATH, name);
+                if (access(path, R_OK) == 0)
+                    gPaths.batteryHealthPath = strdup(path);
+                snprintf(path, sizeof(path), "%s/%s/present", POWER_SUPPLY_PATH, name);
+                if (access(path, R_OK) == 0)
+                    gPaths.batteryPresentPath = strdup(path);
+                snprintf(path, sizeof(path), "%s/%s/capacity", POWER_SUPPLY_PATH, name);
+                if (access(path, R_OK) == 0)
+                    gPaths.batteryCapacityPath = strdup(path);
 
-            char buf[20];
-            // Look for "type" file in each subdirectory
-            path.clear();
-            path.appendFormat("%s/%s/type", POWER_SUPPLY_PATH, name);
-            switch(readPowerSupplyType(path)) {
-            case ANDROID_POWER_SUPPLY_TYPE_AC:
-            case ANDROID_POWER_SUPPLY_TYPE_USB:
-            case ANDROID_POWER_SUPPLY_TYPE_WIRELESS:
-                path.clear();
-                path.appendFormat("%s/%s/online", POWER_SUPPLY_PATH, name);
-                if (access(path.string(), R_OK) == 0)
-                    gChargerNames.add(String8(name));
-                break;
-
-            case ANDROID_POWER_SUPPLY_TYPE_BATTERY:
-                path.clear();
-                path.appendFormat("%s/%s/status", POWER_SUPPLY_PATH, name);
-                if (access(path, R_OK) == 0)
-                    gPaths.batteryStatusPath = path;
-                path.clear();
-                path.appendFormat("%s/%s/health", POWER_SUPPLY_PATH, name);
-                if (access(path, R_OK) == 0)
-                    gPaths.batteryHealthPath = path;
-                path.clear();
-                path.appendFormat("%s/%s/present", POWER_SUPPLY_PATH, name);
-                if (access(path, R_OK) == 0)
-                    gPaths.batteryPresentPath = path;
-                path.clear();
-                path.appendFormat("%s/%s/capacity", POWER_SUPPLY_PATH, name);
-                if (access(path, R_OK) == 0)
-                    gPaths.batteryCapacityPath = path;
-
-                path.clear();
-                path.appendFormat("%s/%s/voltage_now", POWER_SUPPLY_PATH, name);
+                snprintf(path, sizeof(path), "%s/%s/voltage_now", POWER_SUPPLY_PATH, name);
                 if (access(path, R_OK) == 0) {
-                    gPaths.batteryVoltagePath = path;
+                    gPaths.batteryVoltagePath = strdup(path);
                     // voltage_now is in microvolts, not millivolts
                     gVoltageDivisor = 1000;
                 } else {
-                    path.clear();
-                    path.appendFormat("%s/%s/batt_vol", POWER_SUPPLY_PATH, name);
+                    snprintf(path, sizeof(path), "%s/%s/batt_vol", POWER_SUPPLY_PATH, name);
                     if (access(path, R_OK) == 0)
-                            gPaths.batteryVoltagePath = path;
+                        gPaths.batteryVoltagePath = strdup(path);
                 }
 
-                path.clear();
-                path.appendFormat("%s/%s/temp", POWER_SUPPLY_PATH, name);
+                snprintf(path, sizeof(path), "%s/%s/temp", POWER_SUPPLY_PATH, name);
                 if (access(path, R_OK) == 0) {
-                    gPaths.batteryTemperaturePath = path;
+                    gPaths.batteryTemperaturePath = strdup(path);
                 } else {
-                    path.clear();
-                    path.appendFormat("%s/%s/batt_temp", POWER_SUPPLY_PATH, name);
+                    snprintf(path, sizeof(path), "%s/%s/batt_temp", POWER_SUPPLY_PATH, name);
                     if (access(path, R_OK) == 0)
-                            gPaths.batteryTemperaturePath = path;
+                        gPaths.batteryTemperaturePath = strdup(path);
                 }
 
-                path.clear();
-                path.appendFormat("%s/%s/technology", POWER_SUPPLY_PATH, name);
+                snprintf(path, sizeof(path), "%s/%s/technology", POWER_SUPPLY_PATH, name);
                 if (access(path, R_OK) == 0)
-                    gPaths.batteryTechnologyPath = path;
-                break;
+                    gPaths.batteryTechnologyPath = strdup(path);
             }
         }
-        closedir(dir);
     }
+    closedir(dir);
 
-    if (!gChargerNames.size())
-        ALOGE("No charger supplies found");
+    if (!gPaths.acOnlinePath)
+        LOGE("acOnlinePath not found");
+    if (!gPaths.usbOnlinePath)
+        LOGE("usbOnlinePath not found");
     if (!gPaths.batteryStatusPath)
-        ALOGE("batteryStatusPath not found");
+        LOGE("batteryStatusPath not found");
     if (!gPaths.batteryHealthPath)
-        ALOGE("batteryHealthPath not found");
+        LOGE("batteryHealthPath not found");
     if (!gPaths.batteryPresentPath)
-        ALOGE("batteryPresentPath not found");
+        LOGE("batteryPresentPath not found");
     if (!gPaths.batteryCapacityPath)
-        ALOGE("batteryCapacityPath not found");
+        LOGE("batteryCapacityPath not found");
     if (!gPaths.batteryVoltagePath)
-        ALOGE("batteryVoltagePath not found");
+        LOGE("batteryVoltagePath not found");
     if (!gPaths.batteryTemperaturePath)
-        ALOGE("batteryTemperaturePath not found");
+        LOGE("batteryTemperaturePath not found");
     if (!gPaths.batteryTechnologyPath)
-        ALOGE("batteryTechnologyPath not found");
+        LOGE("batteryTechnologyPath not found");
 
     jclass clazz = env->FindClass("com/android/server/BatteryService");
 
     if (clazz == NULL) {
-        ALOGE("Can't find com/android/server/BatteryService");
+        LOGE("Can't find com/android/server/BatteryService");
         return -1;
     }
     
     gFieldIds.mAcOnline = env->GetFieldID(clazz, "mAcOnline", "Z");
     gFieldIds.mUsbOnline = env->GetFieldID(clazz, "mUsbOnline", "Z");
-    gFieldIds.mWirelessOnline = env->GetFieldID(clazz, "mWirelessOnline", "Z");
     gFieldIds.mBatteryStatus = env->GetFieldID(clazz, "mBatteryStatus", "I");
     gFieldIds.mBatteryHealth = env->GetFieldID(clazz, "mBatteryHealth", "I");
     gFieldIds.mBatteryPresent = env->GetFieldID(clazz, "mBatteryPresent", "Z");
@@ -413,7 +341,6 @@ int register_android_server_BatteryService(JNIEnv* env)
 
     LOG_FATAL_IF(gFieldIds.mAcOnline == NULL, "Unable to find BatteryService.AC_ONLINE_PATH");
     LOG_FATAL_IF(gFieldIds.mUsbOnline == NULL, "Unable to find BatteryService.USB_ONLINE_PATH");
-    LOG_FATAL_IF(gFieldIds.mWirelessOnline == NULL, "Unable to find BatteryService.WIRELESS_ONLINE_PATH");
     LOG_FATAL_IF(gFieldIds.mBatteryStatus == NULL, "Unable to find BatteryService.BATTERY_STATUS_PATH");
     LOG_FATAL_IF(gFieldIds.mBatteryHealth == NULL, "Unable to find BatteryService.BATTERY_HEALTH_PATH");
     LOG_FATAL_IF(gFieldIds.mBatteryPresent == NULL, "Unable to find BatteryService.BATTERY_PRESENT_PATH");
@@ -425,7 +352,7 @@ int register_android_server_BatteryService(JNIEnv* env)
     clazz = env->FindClass("android/os/BatteryManager");
     
     if (clazz == NULL) {
-        ALOGE("Can't find android/os/BatteryManager");
+        LOGE("Can't find android/os/BatteryManager");
         return -1;
     }
     

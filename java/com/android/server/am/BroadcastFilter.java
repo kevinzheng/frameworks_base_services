@@ -27,17 +27,13 @@ class BroadcastFilter extends IntentFilter {
     final ReceiverList receiverList;
     final String packageName;
     final String requiredPermission;
-    final int owningUid;
-    final int owningUserId;
 
     BroadcastFilter(IntentFilter _filter, ReceiverList _receiverList,
-            String _packageName, String _requiredPermission, int _owningUid, int _userId) {
+            String _packageName, String _requiredPermission) {
         super(_filter);
         receiverList = _receiverList;
         packageName = _packageName;
         requiredPermission = _requiredPermission;
-        owningUid = _owningUid;
-        owningUserId = _userId;
     }
     
     public void dump(PrintWriter pw, String prefix) {
@@ -64,8 +60,6 @@ class BroadcastFilter extends IntentFilter {
         StringBuilder sb = new StringBuilder();
         sb.append("BroadcastFilter{");
         sb.append(Integer.toHexString(System.identityHashCode(this)));
-        sb.append(" u");
-        sb.append(owningUserId);
         sb.append(' ');
         sb.append(receiverList);
         sb.append('}');

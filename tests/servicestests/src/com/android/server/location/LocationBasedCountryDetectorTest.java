@@ -213,7 +213,7 @@ public class LocationBasedCountryDetectorTest extends AndroidTestCase {
         // QueryThread should be set to NULL
         assertNull(detector.getQueryThread());
         assertTrue(countryListener.notified());
-        assertEquals("us", countryListener.getCountry().toLowerCase());
+        assertEquals(countryListener.getCountry(), country);
     }
 
     public void testFindingCountryCancelled() {
@@ -238,7 +238,7 @@ public class LocationBasedCountryDetectorTest extends AndroidTestCase {
         // QueryThread should be set to NULL
         assertNull(detector.getQueryThread());
         assertTrue(countryListener.notified());
-        assertEquals("us", countryListener.getCountry().toLowerCase());
+        assertEquals(countryListener.getCountry(), country);
     }
 
     public void testFindingLocationCancelled() {
@@ -339,7 +339,7 @@ public class LocationBasedCountryDetectorTest extends AndroidTestCase {
         assertNull(detector.getQueryThread());
         // CountryListener should be notified
         assertTrue(countryListener.notified());
-        assertEquals("us", countryListener.getCountry().toLowerCase());
+        assertEquals(countryListener.getCountry(), country);
     }
 
     private void waitForTimerReset(TestCountryDetector detector) {

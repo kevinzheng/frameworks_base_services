@@ -4,12 +4,11 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= \
     com_android_server_AlarmManagerService.cpp \
     com_android_server_BatteryService.cpp \
-    com_android_server_input_InputApplicationHandle.cpp \
-    com_android_server_input_InputManagerService.cpp \
-    com_android_server_input_InputWindowHandle.cpp \
+    com_android_server_InputApplicationHandle.cpp \
+    com_android_server_InputManager.cpp \
+    com_android_server_InputWindowHandle.cpp \
     com_android_server_LightsService.cpp \
-    com_android_server_power_PowerManagerService.cpp \
-    com_android_server_SerialService.cpp \
+    com_android_server_PowerManagerService.cpp \
     com_android_server_SystemServer.cpp \
     com_android_server_UsbDeviceManager.cpp \
     com_android_server_UsbHostManager.cpp \
@@ -22,17 +21,11 @@ LOCAL_C_INCLUDES += \
     $(JNI_H_INCLUDE) \
     frameworks/base/services \
     frameworks/base/core/jni \
-    external/skia/include/core \
-    libcore/include \
-    libcore/include/libsuspend \
-	$(call include-path-for, libhardware)/hardware \
-	$(call include-path-for, libhardware_legacy)/hardware_legacy \
+    external/skia/include/core
 
 LOCAL_SHARED_LIBRARIES := \
     libandroid_runtime \
-    libandroidfw \
     libcutils \
-    liblog \
     libhardware \
     libhardware_legacy \
     libnativehelper \
@@ -42,8 +35,7 @@ LOCAL_SHARED_LIBRARIES := \
     libinput \
     libskia \
     libgui \
-    libusbhost \
-    libsuspend
+    libusbhost
 
 ifeq ($(WITH_MALLOC_LEAK_CHECK),true)
     LOCAL_CFLAGS += -DMALLOC_LEAK_CHECK

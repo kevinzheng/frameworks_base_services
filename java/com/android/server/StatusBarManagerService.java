@@ -17,7 +17,6 @@
 package com.android.server;
 
 import android.app.StatusBarManager;
-import android.service.notification.StatusBarNotification;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -27,13 +26,14 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.RemoteException;
-import android.os.UserHandle;
 import android.util.Slog;
+import android.view.View;
 
 import com.android.internal.statusbar.IStatusBar;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.StatusBarIcon;
 import com.android.internal.statusbar.StatusBarIconList;
+import com.android.internal.statusbar.StatusBarNotification;
 import com.android.server.wm.WindowManagerService;
 
 import java.io.FileDescriptor;
@@ -64,7 +64,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub
             = new HashMap<IBinder,StatusBarNotification>();
 
     // for disabling the status bar
-    final ArrayList<DisableRecord> mDisableRecords = new ArrayList<DisableRecord>();
+    ArrayList<DisableRecord> mDisableRecords = new ArrayList<DisableRecord>();
     IBinder mSysUiVisToken = new Binder();
     int mDisabled = 0;
 
@@ -75,17 +75,15 @@ public class StatusBarManagerService extends IStatusBarService.Stub
     int mImeWindowVis = 0;
     int mImeBackDisposition;
     IBinder mImeToken = null;
-    int mCurrentUserId;
 
     private class DisableRecord implements IBinder.DeathRecipient {
-        int userId;
         String pkg;
         int what;
         IBinder token;
 
         public void binderDied() {
             Slog.i(TAG, "binder died for pkg=" + pkg);
-            disableInternal(userId, 0, token, pkg);
+            disable(0, token, pkg);
             token.unlinkToDeath(this, 0);
         }
     }
@@ -119,60 +117,43 @@ public class StatusBarManagerService extends IStatusBarService.Stub
     // ================================================================================
     // From IStatusBarService
     // ================================================================================
-    public void expandNotificationsPanel() {
+    public void expand() {
         enforceExpandStatusBar();
 
         if (mBar != null) {
             try {
-                mBar.animateExpandNotificationsPanel();
+                mBar.animateExpand();
             } catch (RemoteException ex) {
             }
         }
     }
 
-    public void collapsePanels() {
+    public void collapse() {
         enforceExpandStatusBar();
 
         if (mBar != null) {
             try {
-                mBar.animateCollapsePanels();
-            } catch (RemoteException ex) {
-            }
-        }
-    }
-
-    public void expandSettingsPanel() {
-        enforceExpandStatusBar();
-
-        if (mBar != null) {
-            try {
-                mBar.animateExpandSettingsPanel();
+                mBar.animateCollapse();
             } catch (RemoteException ex) {
             }
         }
     }
 
     public void disable(int what, IBinder token, String pkg) {
-        disableInternal(mCurrentUserId, what, token, pkg);
-    }
-
-    private void disableInternal(int userId, int what, IBinder token, String pkg) {
         enforceStatusBar();
 
         synchronized (mLock) {
-            disableLocked(userId, what, token, pkg);
+            disableLocked(what, token, pkg);
         }
     }
 
-    private void disableLocked(int userId, int what, IBinder token, String pkg) {
+    private void disableLocked(int what, IBinder token, String pkg) {
         // It's important that the the callback and the call to mBar get done
         // in the same order when multiple threads are calling this function
         // so they are paired correctly.  The messages on the handler will be
         // handled in the order they were enqueued, but will be outside the lock.
-        manageDisableListLocked(userId, what, token, pkg);
-
-        // Ensure state for the current user is applied, even if passed a non-current user.
-        final int net = gatherDisableActionsLocked(mCurrentUserId);
+        manageDisableListLocked(what, token, pkg);
+        final int net = gatherDisableActionsLocked();
         if (net != mDisabled) {
             mDisabled = net;
             mHandler.post(new Runnable() {
@@ -199,8 +180,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub
                 throw new SecurityException("invalid status bar icon slot: " + slot);
             }
 
-            StatusBarIcon icon = new StatusBarIcon(iconPackage, UserHandle.OWNER, iconId,
-                    iconLevel, 0,
+            StatusBarIcon icon = new StatusBarIcon(iconPackage, iconId, iconLevel, 0,
                     contentDescription);
             //Slog.d(TAG, "setIcon slot=" + slot + " index=" + index + " icon=" + icon);
             mIcons.setIcon(index, icon);
@@ -312,30 +292,27 @@ public class StatusBarManagerService extends IStatusBarService.Stub
         }
     }
 
-    public void setSystemUiVisibility(int vis, int mask) {
+    public void setSystemUiVisibility(int vis) {
         // also allows calls from window manager which is in this process.
         enforceStatusBarService();
 
         if (SPEW) Slog.d(TAG, "setSystemUiVisibility(0x" + Integer.toHexString(vis) + ")");
 
         synchronized (mLock) {
-            updateUiVisibilityLocked(vis, mask);
-            disableLocked(
-                    mCurrentUserId,
-                    vis & StatusBarManager.DISABLE_MASK,
-                    mSysUiVisToken,
+            updateUiVisibilityLocked(vis);
+            disableLocked(vis & StatusBarManager.DISABLE_MASK, mSysUiVisToken,
                     "WindowManager.LayoutParams");
         }
     }
 
-    private void updateUiVisibilityLocked(final int vis, final int mask) {
+    private void updateUiVisibilityLocked(final int vis) {
         if (mSystemUiVisibility != vis) {
             mSystemUiVisibility = vis;
             mHandler.post(new Runnable() {
                     public void run() {
                         if (mBar != null) {
                             try {
-                                mBar.setSystemUiVisibility(vis, mask);
+                                mBar.setSystemUiVisibility(vis);
                             } catch (RemoteException ex) {
                             }
                         }
@@ -375,30 +352,6 @@ public class StatusBarManagerService extends IStatusBarService.Stub
         }
     }
 
-    @Override
-    public void preloadRecentApps() {
-        if (mBar != null) {
-            try {
-                mBar.preloadRecentApps();
-            } catch (RemoteException ex) {}
-        }
-    }
-
-    @Override
-    public void cancelPreloadRecentApps() {
-        if (mBar != null) {
-            try {
-                mBar.cancelPreloadRecentApps();
-            } catch (RemoteException ex) {}
-        }
-    }
-
-    @Override
-    public void setCurrentUser(int newUserId) {
-        if (SPEW) Slog.d(TAG, "Setting current user to user " + newUserId);
-        mCurrentUserId = newUserId;
-    }
-
     private void enforceStatusBar() {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR,
                 "StatusBarManagerService");
@@ -434,7 +387,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub
             }
         }
         synchronized (mLock) {
-            switches[0] = gatherDisableActionsLocked(mCurrentUserId);
+            switches[0] = gatherDisableActionsLocked();
             switches[1] = mSystemUiVisibility;
             switches[2] = mMenuVisible ? 1 : 0;
             switches[3] = mImeWindowVis;
@@ -518,8 +471,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub
         synchronized (mNotifications) {
             final StatusBarNotification n = mNotifications.remove(key);
             if (n == null) {
-                Slog.e(TAG, "removeNotification key not found: " + key);
-                return;
+                throw new IllegalArgumentException("removeNotification key not found: " + key);
             }
             if (mBar != null) {
                 try {
@@ -535,10 +487,9 @@ public class StatusBarManagerService extends IStatusBarService.Stub
     // ================================================================================
 
     // lock on mDisableRecords
-    void manageDisableListLocked(int userId, int what, IBinder token, String pkg) {
+    void manageDisableListLocked(int what, IBinder token, String pkg) {
         if (SPEW) {
-            Slog.d(TAG, "manageDisableList userId=" + userId
-                    + " what=0x" + Integer.toHexString(what) + " pkg=" + pkg);
+            Slog.d(TAG, "manageDisableList what=0x" + Integer.toHexString(what) + " pkg=" + pkg);
         }
         // update the list
         final int N = mDisableRecords.size();
@@ -546,7 +497,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub
         int i;
         for (i=0; i<N; i++) {
             DisableRecord t = mDisableRecords.get(i);
-            if (t.token == token && t.userId == userId) {
+            if (t.token == token) {
                 tok = t;
                 break;
             }
@@ -559,7 +510,6 @@ public class StatusBarManagerService extends IStatusBarService.Stub
         } else {
             if (tok == null) {
                 tok = new DisableRecord();
-                tok.userId = userId;
                 try {
                     token.linkToDeath(tok, 0);
                 }
@@ -575,15 +525,12 @@ public class StatusBarManagerService extends IStatusBarService.Stub
     }
 
     // lock on mDisableRecords
-    int gatherDisableActionsLocked(int userId) {
+    int gatherDisableActionsLocked() {
         final int N = mDisableRecords.size();
         // gather the new net flags
         int net = 0;
         for (int i=0; i<N; i++) {
-            final DisableRecord rec = mDisableRecords.get(i);
-            if (rec.userId == userId) {
-                net |= rec.what;
-            }
+            net |= mDisableRecords.get(i).what;
         }
         return net;
     }
@@ -615,15 +562,13 @@ public class StatusBarManagerService extends IStatusBarService.Stub
         }
 
         synchronized (mLock) {
-            pw.println("  mDisabled=0x" + Integer.toHexString(mDisabled));
             final int N = mDisableRecords.size();
-            pw.println("  mDisableRecords.size=" + N);
+            pw.println("  mDisableRecords.size=" + N
+                    + " mDisabled=0x" + Integer.toHexString(mDisabled));
             for (int i=0; i<N; i++) {
                 DisableRecord tok = mDisableRecords.get(i);
-                pw.println("    [" + i + "] userId=" + tok.userId
-                                + " what=0x" + Integer.toHexString(tok.what)
-                                + " pkg=" + tok.pkg
-                                + " token=" + tok.token);
+                pw.println("    [" + i + "] what=0x" + Integer.toHexString(tok.what)
+                                + " pkg=" + tok.pkg + " token=" + tok.token);
             }
         }
     }
@@ -633,7 +578,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub
             String action = intent.getAction();
             if (Intent.ACTION_CLOSE_SYSTEM_DIALOGS.equals(action)
                     || Intent.ACTION_SCREEN_OFF.equals(action)) {
-                collapsePanels();
+                collapse();
             }
             /*
             else if (Telephony.Intents.SPN_STRINGS_UPDATED_ACTION.equals(action)) {

@@ -28,10 +28,8 @@ import android.os.Debug;
 import android.os.DropBoxManager;
 import android.os.FileUtils;
 import android.os.Handler;
-import android.os.Message;
 import android.os.StatFs;
 import android.os.SystemClock;
-import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.format.Time;
 import android.util.Slog;
@@ -66,9 +64,6 @@ public final class DropBoxManagerService extends IDropBoxManagerService.Stub {
     private static final int DEFAULT_RESERVE_PERCENT = 10;
     private static final int QUOTA_RESCAN_MILLIS = 5000;
 
-    // mHandler 'what' value.
-    private static final int MSG_SEND_BROADCAST = 1;
-
     private static final boolean PROFILE_DUMP = false;
 
     // TODO: This implementation currently uses one file per entry, which is
@@ -93,10 +88,10 @@ public final class DropBoxManagerService extends IDropBoxManagerService.Stub {
     private int mCachedQuotaBlocks = 0;  // Space we can use: computed from free space, etc.
     private long mCachedQuotaUptimeMillis = 0;
 
-    private volatile boolean mBooted = false;
+    // Ensure that all log entries have a unique timestamp
+    private long mLastTimestamp = 0;
 
-    // Provide a way to perform sendBroadcast asynchronously to avoid deadlocks.
-    private final Handler mHandler;
+    private volatile boolean mBooted = false;
 
     /** Receives events that might indicate a need to clean up files. */
     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
@@ -146,23 +141,12 @@ public final class DropBoxManagerService extends IDropBoxManagerService.Stub {
         context.registerReceiver(mReceiver, filter);
 
         mContentResolver.registerContentObserver(
-            Settings.Global.CONTENT_URI, true,
+            Settings.Secure.CONTENT_URI, true,
             new ContentObserver(new Handler()) {
-                @Override
                 public void onChange(boolean selfChange) {
                     mReceiver.onReceive(context, (Intent) null);
                 }
             });
-
-        mHandler = new Handler() {
-            @Override
-            public void handleMessage(Message msg) {
-                if (msg.what == MSG_SEND_BROADCAST) {
-                    mContext.sendBroadcastAsUser((Intent)msg.obj, UserHandle.OWNER,
-                            android.Manifest.permission.READ_LOGS);
-                }
-            }
-        };
 
         // The real work gets done lazily in init() -- that way service creation always
         // succeeds, and things like disk problems cause individual method failures.
@@ -173,7 +157,6 @@ public final class DropBoxManagerService extends IDropBoxManagerService.Stub {
         mContext.unregisterReceiver(mReceiver);
     }
 
-    @Override
     public void add(DropBoxManager.Entry entry) {
         File temp = null;
         OutputStream output = null;
@@ -244,17 +227,14 @@ public final class DropBoxManagerService extends IDropBoxManagerService.Stub {
             long time = createEntry(temp, tag, flags);
             temp = null;
 
-            final Intent dropboxIntent = new Intent(DropBoxManager.ACTION_DROPBOX_ENTRY_ADDED);
+            Intent dropboxIntent = new Intent(DropBoxManager.ACTION_DROPBOX_ENTRY_ADDED);
             dropboxIntent.putExtra(DropBoxManager.EXTRA_TAG, tag);
             dropboxIntent.putExtra(DropBoxManager.EXTRA_TIME, time);
             if (!mBooted) {
                 dropboxIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
             }
-            // Call sendBroadcast after returning from this call to avoid deadlock. In particular
-            // the caller may be holding the WindowManagerService lock but sendBroadcast requires a
-            // lock in ActivityManagerService. ActivityManagerService has been caught holding that
-            // very lock while waiting for the WindowManagerService lock.
-            mHandler.sendMessage(mHandler.obtainMessage(MSG_SEND_BROADCAST, dropboxIntent));
+            mContext.sendBroadcast(dropboxIntent, android.Manifest.permission.READ_LOGS);
+
         } catch (IOException e) {
             Slog.e(TAG, "Can't write: " + tag, e);
         } finally {
@@ -265,8 +245,8 @@ public final class DropBoxManagerService extends IDropBoxManagerService.Stub {
     }
 
     public boolean isTagEnabled(String tag) {
-        return !"disabled".equals(Settings.Global.getString(
-                mContentResolver, Settings.Global.DROPBOX_TAG_PREFIX + tag));
+        return !"disabled".equals(Settings.Secure.getString(
+                mContentResolver, Settings.Secure.DROPBOX_TAG_PREFIX + tag));
     }
 
     public synchronized DropBoxManager.Entry getNextEntry(String tag, long millis) {
@@ -688,10 +668,10 @@ public final class DropBoxManagerService extends IDropBoxManagerService.Stub {
     private synchronized long trimToFit() {
         // Expunge aged items (including tombstones marking deleted data).
 
-        int ageSeconds = Settings.Global.getInt(mContentResolver,
-                Settings.Global.DROPBOX_AGE_SECONDS, DEFAULT_AGE_SECONDS);
-        int maxFiles = Settings.Global.getInt(mContentResolver,
-                Settings.Global.DROPBOX_MAX_FILES, DEFAULT_MAX_FILES);
+        int ageSeconds = Settings.Secure.getInt(mContentResolver,
+                Settings.Secure.DROPBOX_AGE_SECONDS, DEFAULT_AGE_SECONDS);
+        int maxFiles = Settings.Secure.getInt(mContentResolver,
+                Settings.Secure.DROPBOX_MAX_FILES, DEFAULT_MAX_FILES);
         long cutoffMillis = System.currentTimeMillis() - ageSeconds * 1000;
         while (!mAllFiles.contents.isEmpty()) {
             EntryFile entry = mAllFiles.contents.first();
@@ -710,12 +690,12 @@ public final class DropBoxManagerService extends IDropBoxManagerService.Stub {
 
         long uptimeMillis = SystemClock.uptimeMillis();
         if (uptimeMillis > mCachedQuotaUptimeMillis + QUOTA_RESCAN_MILLIS) {
-            int quotaPercent = Settings.Global.getInt(mContentResolver,
-                    Settings.Global.DROPBOX_QUOTA_PERCENT, DEFAULT_QUOTA_PERCENT);
-            int reservePercent = Settings.Global.getInt(mContentResolver,
-                    Settings.Global.DROPBOX_RESERVE_PERCENT, DEFAULT_RESERVE_PERCENT);
-            int quotaKb = Settings.Global.getInt(mContentResolver,
-                    Settings.Global.DROPBOX_QUOTA_KB, DEFAULT_QUOTA_KB);
+            int quotaPercent = Settings.Secure.getInt(mContentResolver,
+                    Settings.Secure.DROPBOX_QUOTA_PERCENT, DEFAULT_QUOTA_PERCENT);
+            int reservePercent = Settings.Secure.getInt(mContentResolver,
+                    Settings.Secure.DROPBOX_RESERVE_PERCENT, DEFAULT_RESERVE_PERCENT);
+            int quotaKb = Settings.Secure.getInt(mContentResolver,
+                    Settings.Secure.DROPBOX_QUOTA_KB, DEFAULT_QUOTA_KB);
 
             mStatFs.restat(mDropBoxDir.getPath());
             int available = mStatFs.getAvailableBlocks();

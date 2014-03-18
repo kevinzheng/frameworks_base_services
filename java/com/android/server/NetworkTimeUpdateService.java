@@ -55,7 +55,16 @@ public class NetworkTimeUpdateService {
 
     private static final int EVENT_AUTO_TIME_CHANGED = 1;
     private static final int EVENT_POLL_NETWORK_TIME = 2;
-    private static final int EVENT_NETWORK_CONNECTED = 3;
+    private static final int EVENT_WIFI_CONNECTED = 3;
+
+    /** Normal polling frequency */
+    private static final long POLLING_INTERVAL_MS = 24L * 60 * 60 * 1000; // 24 hrs
+    /** Try-again polling interval, in case the network request failed */
+    private static final long POLLING_INTERVAL_SHORTER_MS = 60 * 1000L; // 60 seconds
+    /** Number of times to try again */
+    private static final int TRY_AGAIN_TIMES_MAX = 3;
+    /** If the time difference is greater than this threshold, then update the time. */
+    private static final int TIME_ERROR_THRESHOLD_MS = 5 * 1000;
 
     private static final String ACTION_POLL =
             "com.android.server.NetworkTimeUpdateService.action.POLL";
@@ -77,15 +86,6 @@ public class NetworkTimeUpdateService {
     private SettingsObserver mSettingsObserver;
     // The last time that we successfully fetched the NTP time.
     private long mLastNtpFetchTime = NOT_SET;
-
-    // Normal polling frequency
-    private final long mPollingIntervalMs;
-    // Try-again polling interval, in case the network request failed
-    private final long mPollingIntervalShorterMs;
-    // Number of times to try again
-    private final int mTryAgainTimesMax;
-    // If the time difference is greater than this threshold, then update the time.
-    private final int mTimeErrorThresholdMs;
     // Keeps track of how many quick attempts were made to fetch NTP time.
     // During bootup, the network may not have been up yet, or it's taking time for the
     // connection to happen.
@@ -97,15 +97,6 @@ public class NetworkTimeUpdateService {
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
         Intent pollIntent = new Intent(ACTION_POLL, null);
         mPendingPollIntent = PendingIntent.getBroadcast(mContext, POLL_REQUEST, pollIntent, 0);
-
-        mPollingIntervalMs = mContext.getResources().getInteger(
-                com.android.internal.R.integer.config_ntpPollingInterval);
-        mPollingIntervalShorterMs = mContext.getResources().getInteger(
-                com.android.internal.R.integer.config_ntpPollingIntervalShorter);
-        mTryAgainTimesMax = mContext.getResources().getInteger(
-                com.android.internal.R.integer.config_ntpRetry);
-        mTimeErrorThresholdMs = mContext.getResources().getInteger(
-                com.android.internal.R.integer.config_ntpThreshold);
     }
 
     /** Initialize the receivers and initiate the first NTP request */
@@ -152,37 +143,31 @@ public class NetworkTimeUpdateService {
         if (!isAutomaticTimeRequested()) return;
 
         final long refTime = SystemClock.elapsedRealtime();
-        // If NITZ time was received less than mPollingIntervalMs time ago,
+        // If NITZ time was received less than POLLING_INTERVAL_MS time ago,
         // no need to sync to NTP.
-        if (mNitzTimeSetTime != NOT_SET && refTime - mNitzTimeSetTime < mPollingIntervalMs) {
-            resetAlarm(mPollingIntervalMs);
+        if (mNitzTimeSetTime != NOT_SET && refTime - mNitzTimeSetTime < POLLING_INTERVAL_MS) {
+            resetAlarm(POLLING_INTERVAL_MS);
             return;
         }
         final long currentTime = System.currentTimeMillis();
         if (DBG) Log.d(TAG, "System time = " + currentTime);
         // Get the NTP time
-        if (mLastNtpFetchTime == NOT_SET || refTime >= mLastNtpFetchTime + mPollingIntervalMs
+        if (mLastNtpFetchTime == NOT_SET || refTime >= mLastNtpFetchTime + POLLING_INTERVAL_MS
                 || event == EVENT_AUTO_TIME_CHANGED) {
             if (DBG) Log.d(TAG, "Before Ntp fetch");
 
             // force refresh NTP cache when outdated
-            if (mTime.getCacheAge() >= mPollingIntervalMs) {
+            if (mTime.getCacheAge() >= POLLING_INTERVAL_MS) {
                 mTime.forceRefresh();
             }
 
             // only update when NTP time is fresh
-            if (mTime.getCacheAge() < mPollingIntervalMs) {
+            if (mTime.getCacheAge() < POLLING_INTERVAL_MS) {
                 final long ntp = mTime.currentTimeMillis();
                 mTryAgainCounter = 0;
-                // If the clock is more than N seconds off or this is the first time it's been
-                // fetched since boot, set the current time.
-                if (Math.abs(ntp - currentTime) > mTimeErrorThresholdMs
-                        || mLastNtpFetchTime == NOT_SET) {
+                mLastNtpFetchTime = SystemClock.elapsedRealtime();
+                if (Math.abs(ntp - currentTime) > TIME_ERROR_THRESHOLD_MS) {
                     // Set the system time
-                    if (DBG && mLastNtpFetchTime == NOT_SET
-                            && Math.abs(ntp - currentTime) <= mTimeErrorThresholdMs) {
-                        Log.d(TAG, "For initial setup, rtc = " + currentTime);
-                    }
                     if (DBG) Log.d(TAG, "Ntp time to be set = " + ntp);
                     // Make sure we don't overflow, since it's going to be converted to an int
                     if (ntp / 1000 < Integer.MAX_VALUE) {
@@ -191,21 +176,20 @@ public class NetworkTimeUpdateService {
                 } else {
                     if (DBG) Log.d(TAG, "Ntp time is close enough = " + ntp);
                 }
-                mLastNtpFetchTime = SystemClock.elapsedRealtime();
             } else {
                 // Try again shortly
                 mTryAgainCounter++;
-                if (mTryAgainTimesMax < 0 || mTryAgainCounter <= mTryAgainTimesMax) {
-                    resetAlarm(mPollingIntervalShorterMs);
+                if (mTryAgainCounter <= TRY_AGAIN_TIMES_MAX) {
+                    resetAlarm(POLLING_INTERVAL_SHORTER_MS);
                 } else {
                     // Try much later
                     mTryAgainCounter = 0;
-                    resetAlarm(mPollingIntervalMs);
+                    resetAlarm(POLLING_INTERVAL_MS);
                 }
                 return;
             }
         }
-        resetAlarm(mPollingIntervalMs);
+        resetAlarm(POLLING_INTERVAL_MS);
     }
 
     /**
@@ -224,8 +208,8 @@ public class NetworkTimeUpdateService {
      * Checks if the user prefers to automatically set the time.
      */
     private boolean isAutomaticTimeRequested() {
-        return Settings.Global.getInt(
-                mContext.getContentResolver(), Settings.Global.AUTO_TIME, 0) != 0;
+        return Settings.System.getInt(mContext.getContentResolver(), Settings.System.AUTO_TIME, 0)
+                != 0;
     }
 
     /** Receiver for Nitz time events */
@@ -250,15 +234,13 @@ public class NetworkTimeUpdateService {
             String action = intent.getAction();
             if (ConnectivityManager.CONNECTIVITY_ACTION.equals(action)) {
                 // There is connectivity
-                final ConnectivityManager connManager = (ConnectivityManager) context
-                        .getSystemService(Context.CONNECTIVITY_SERVICE);
-                final NetworkInfo netInfo = connManager.getActiveNetworkInfo();
+                NetworkInfo netInfo = (NetworkInfo)intent.getParcelableExtra(
+                        ConnectivityManager.EXTRA_NETWORK_INFO);
                 if (netInfo != null) {
                     // Verify that it's a WIFI connection
                     if (netInfo.getState() == NetworkInfo.State.CONNECTED &&
-                            (netInfo.getType() == ConnectivityManager.TYPE_WIFI ||
-                                netInfo.getType() == ConnectivityManager.TYPE_ETHERNET) ) {
-                        mHandler.obtainMessage(EVENT_NETWORK_CONNECTED).sendToTarget();
+                            netInfo.getType() == ConnectivityManager.TYPE_WIFI ) {
+                        mHandler.obtainMessage(EVENT_WIFI_CONNECTED).sendToTarget();
                     }
                 }
             }
@@ -277,7 +259,7 @@ public class NetworkTimeUpdateService {
             switch (msg.what) {
                 case EVENT_AUTO_TIME_CHANGED:
                 case EVENT_POLL_NETWORK_TIME:
-                case EVENT_NETWORK_CONNECTED:
+                case EVENT_WIFI_CONNECTED:
                     onPollNetworkTime(msg.what);
                     break;
             }
@@ -298,7 +280,7 @@ public class NetworkTimeUpdateService {
 
         void observe(Context context) {
             ContentResolver resolver = context.getContentResolver();
-            resolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.AUTO_TIME),
+            resolver.registerContentObserver(Settings.System.getUriFor(Settings.System.AUTO_TIME),
                     false, this);
         }
 

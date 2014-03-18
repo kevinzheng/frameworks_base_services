@@ -25,8 +25,8 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Message;
+import android.os.Process;
 import android.util.Slog;
-import android.view.WindowManager;
 
 class AppNotRespondingDialog extends BaseErrorDialog {
     private static final String TAG = "AppNotRespondingDialog";
@@ -40,7 +40,7 @@ class AppNotRespondingDialog extends BaseErrorDialog {
     private final ProcessRecord mProc;
     
     public AppNotRespondingDialog(ActivityManagerService service, Context context,
-            ProcessRecord app, ActivityRecord activity, boolean aboveSystem) {
+            ProcessRecord app, ActivityRecord activity) {
         super(context);
         
         mService = service;
@@ -91,14 +91,8 @@ class AppNotRespondingDialog extends BaseErrorDialog {
         }
 
         setTitle(res.getText(com.android.internal.R.string.anr_title));
-        if (aboveSystem) {
-            getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ERROR);
-        }
         getWindow().addFlags(FLAG_SYSTEM_ERROR);
-        WindowManager.LayoutParams attrs = getWindow().getAttributes();
-        attrs.setTitle("Application Not Responding: " + app.info.processName);
-        attrs.privateFlags = WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
-        getWindow().setAttributes(attrs);
+        getWindow().setTitle("Application Not Responding: " + app.info.processName);
     }
 
     public void onStop() {

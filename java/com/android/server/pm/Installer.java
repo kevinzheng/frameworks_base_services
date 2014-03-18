@@ -25,7 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-public final class Installer {
+class Installer {
     private static final String TAG = "Installer";
 
     private static final boolean LOCAL_DEBUG = false;
@@ -188,7 +188,7 @@ public final class Installer {
         }
     }
 
-    public int install(String name, int uid, int gid, String seinfo) {
+    public int install(String name, int uid, int gid) {
         StringBuilder builder = new StringBuilder("install");
         builder.append(' ');
         builder.append(name);
@@ -196,8 +196,6 @@ public final class Installer {
         builder.append(uid);
         builder.append(' ');
         builder.append(gid);
-        builder.append(' ');
-        builder.append(seinfo != null ? seinfo : "!");
         return execute(builder.toString());
     }
 
@@ -245,27 +243,14 @@ public final class Installer {
         return execute(builder.toString());
     }
 
-    public int fixUid(String name, int uid, int gid) {
-        StringBuilder builder = new StringBuilder("fixuid");
-        builder.append(' ');
-        builder.append(name);
-        builder.append(' ');
-        builder.append(uid);
-        builder.append(' ');
-        builder.append(gid);
-        return execute(builder.toString());
-    }
-
-    public int deleteCacheFiles(String name, int userId) {
+    public int deleteCacheFiles(String name) {
         StringBuilder builder = new StringBuilder("rmcache");
         builder.append(' ');
         builder.append(name);
-        builder.append(' ');
-        builder.append(userId);
         return execute(builder.toString());
     }
 
-    public int createUserData(String name, int uid, int userId, String seinfo) {
+    public int createUserData(String name, int uid, int userId) {
         StringBuilder builder = new StringBuilder("mkuserdata");
         builder.append(' ');
         builder.append(name);
@@ -273,8 +258,6 @@ public final class Installer {
         builder.append(uid);
         builder.append(' ');
         builder.append(userId);
-        builder.append(' ');
-        builder.append(seinfo != null ? seinfo : "!");
         return execute(builder.toString());
     }
 
@@ -309,17 +292,27 @@ public final class Installer {
         return execute(builder.toString());
     }
 
-    public int getSizeInfo(String pkgName, int persona, String apkPath, String libDirPath,
-            String fwdLockApkPath, String asecPath, PackageStats pStats) {
+    /*
+     * @param packagePathSuffix The name of the path relative to install
+     * directory. Say if the path name is /data/app/com.test-1.apk, the package
+     * suffix path will be com.test-1
+     */
+    public int setForwardLockPerm(String packagePathSuffix, int gid) {
+        StringBuilder builder = new StringBuilder("protect");
+        builder.append(' ');
+        builder.append(packagePathSuffix);
+        builder.append(' ');
+        builder.append(gid);
+        return execute(builder.toString());
+    }
+
+    public int getSizeInfo(String pkgName, String apkPath, String fwdLockApkPath,
+            String asecPath, PackageStats pStats) {
         StringBuilder builder = new StringBuilder("getsize");
         builder.append(' ');
         builder.append(pkgName);
         builder.append(' ');
-        builder.append(persona);
-        builder.append(' ');
         builder.append(apkPath);
-        builder.append(' ');
-        builder.append(libDirPath != null ? libDirPath : "!");
         builder.append(' ');
         builder.append(fwdLockApkPath != null ? fwdLockApkPath : "!");
         builder.append(' ');
@@ -346,20 +339,12 @@ public final class Installer {
         return execute("movefiles");
     }
 
-    /**
-     * Links the native library directory in an application's directory to its
-     * real location.
-     *
-     * @param dataPath data directory where the application is
-     * @param nativeLibPath target native library path
-     * @return -1 on error
-     */
-    public int linkNativeLibraryDirectory(String dataPath, String nativeLibPath, int userId) {
+    public int linkNativeLibraryDirectory(String dataPath, String nativeLibPath) {
         if (dataPath == null) {
-            Slog.e(TAG, "linkNativeLibraryDirectory dataPath is null");
+            Slog.e(TAG, "unlinkNativeLibraryDirectory dataPath is null");
             return -1;
         } else if (nativeLibPath == null) {
-            Slog.e(TAG, "linkNativeLibraryDirectory nativeLibPath is null");
+            Slog.e(TAG, "unlinkNativeLibraryDirectory nativeLibPath is null");
             return -1;
         }
 
@@ -367,8 +352,18 @@ public final class Installer {
         builder.append(dataPath);
         builder.append(' ');
         builder.append(nativeLibPath);
-        builder.append(' ');
-        builder.append(userId);
+
+        return execute(builder.toString());
+    }
+
+    public int unlinkNativeLibraryDirectory(String dataPath) {
+        if (dataPath == null) {
+            Slog.e(TAG, "unlinkNativeLibraryDirectory dataPath is null");
+            return -1;
+        }
+
+        StringBuilder builder = new StringBuilder("unlinklib ");
+        builder.append(dataPath);
 
         return execute(builder.toString());
     }

@@ -17,18 +17,13 @@
 package com.android.server;
 
 import android.app.ActivityManagerNative;
-import android.app.AppGlobals;
-import android.app.AppOpsManager;
 import android.app.IActivityManager;
-import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipDescription;
 import android.content.IClipboard;
 import android.content.IOnPrimaryClipChangedListener;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -39,10 +34,8 @@ import android.os.Parcel;
 import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
-import android.os.UserHandle;
 import android.util.Pair;
 import android.util.Slog;
-import android.util.SparseArray;
 
 import java.util.HashSet;
 
@@ -50,41 +43,18 @@ import java.util.HashSet;
  * Implementation of the clipboard for copy and paste.
  */
 public class ClipboardService extends IClipboard.Stub {
-
-    private static final String TAG = "ClipboardService";
-
     private final Context mContext;
     private final IActivityManager mAm;
     private final PackageManager mPm;
-    private final AppOpsManager mAppOps;
     private final IBinder mPermissionOwner;
 
-    private class ListenerInfo {
-        final int mUid;
-        final String mPackageName;
-        ListenerInfo(int uid, String packageName) {
-            mUid = uid;
-            mPackageName = packageName;
-        }
-    }
+    private final RemoteCallbackList<IOnPrimaryClipChangedListener> mPrimaryClipListeners
+            = new RemoteCallbackList<IOnPrimaryClipChangedListener>();
 
-    private class PerUserClipboard {
-        final int userId;
+    private ClipData mPrimaryClip;
 
-        final RemoteCallbackList<IOnPrimaryClipChangedListener> primaryClipListeners
-                = new RemoteCallbackList<IOnPrimaryClipChangedListener>();
-
-        ClipData primaryClip;
-
-        final HashSet<String> activePermissionOwners
-                = new HashSet<String>();
-
-        PerUserClipboard(int userId) {
-            this.userId = userId;
-        }
-    }
-
-    private SparseArray<PerUserClipboard> mClipboards = new SparseArray<PerUserClipboard>();
+    private final HashSet<String> mActivePermissionOwners
+            = new HashSet<String>();
 
     /**
      * Instantiates the clipboard.
@@ -93,7 +63,6 @@ public class ClipboardService extends IClipboard.Stub {
         mContext = context;
         mAm = ActivityManagerNative.getDefault();
         mPm = context.getPackageManager();
-        mAppOps = (AppOpsManager)context.getSystemService(Context.APP_OPS_SERVICE);
         IBinder permOwner = null;
         try {
             permOwner = mAm.newUriPermissionOwner("clipboard");
@@ -101,19 +70,6 @@ public class ClipboardService extends IClipboard.Stub {
             Slog.w("clipboard", "AM dead", e);
         }
         mPermissionOwner = permOwner;
-
-        // Remove the clipboard if a user is removed
-        IntentFilter userFilter = new IntentFilter();
-        userFilter.addAction(Intent.ACTION_USER_REMOVED);
-        mContext.registerReceiver(new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                String action = intent.getAction();
-                if (Intent.ACTION_USER_REMOVED.equals(action)) {
-                    removeClipboard(intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0));
-                }
-            }
-        }, userFilter);
     }
 
     @Override
@@ -128,115 +84,63 @@ public class ClipboardService extends IClipboard.Stub {
         
     }
 
-    private PerUserClipboard getClipboard() {
-        return getClipboard(UserHandle.getCallingUserId());
-    }
-
-    private PerUserClipboard getClipboard(int userId) {
-        synchronized (mClipboards) {
-            PerUserClipboard puc = mClipboards.get(userId);
-            if (puc == null) {
-                puc = new PerUserClipboard(userId);
-                mClipboards.put(userId, puc);
-            }
-            return puc;
-        }
-    }
-
-    private void removeClipboard(int userId) {
-        synchronized (mClipboards) {
-            mClipboards.remove(userId);
-        }
-    }
-
-    public void setPrimaryClip(ClipData clip, String callingPackage) {
+    public void setPrimaryClip(ClipData clip) {
         synchronized (this) {
             if (clip != null && clip.getItemCount() <= 0) {
                 throw new IllegalArgumentException("No items");
             }
-            if (mAppOps.noteOp(AppOpsManager.OP_WRITE_CLIPBOARD, Binder.getCallingUid(),
-                    callingPackage) != AppOpsManager.MODE_ALLOWED) {
-                return;
-            }
             checkDataOwnerLocked(clip, Binder.getCallingUid());
             clearActiveOwnersLocked();
-            PerUserClipboard clipboard = getClipboard();
-            clipboard.primaryClip = clip;
-            final int n = clipboard.primaryClipListeners.beginBroadcast();
+            mPrimaryClip = clip;
+            final int n = mPrimaryClipListeners.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
-                    ListenerInfo li = (ListenerInfo)
-                            clipboard.primaryClipListeners.getBroadcastCookie(i);
-                    if (mAppOps.checkOpNoThrow(AppOpsManager.OP_READ_CLIPBOARD, li.mUid,
-                            li.mPackageName) == AppOpsManager.MODE_ALLOWED) {
-                        clipboard.primaryClipListeners.getBroadcastItem(i)
-                                .dispatchPrimaryClipChanged();
-                    }
+                    mPrimaryClipListeners.getBroadcastItem(i).dispatchPrimaryClipChanged();
                 } catch (RemoteException e) {
 
                     // The RemoteCallbackList will take care of removing
                     // the dead object for us.
                 }
             }
-            clipboard.primaryClipListeners.finishBroadcast();
+            mPrimaryClipListeners.finishBroadcast();
         }
     }
     
     public ClipData getPrimaryClip(String pkg) {
         synchronized (this) {
-            if (mAppOps.noteOp(AppOpsManager.OP_READ_CLIPBOARD, Binder.getCallingUid(),
-                    pkg) != AppOpsManager.MODE_ALLOWED) {
-                return null;
-            }
             addActiveOwnerLocked(Binder.getCallingUid(), pkg);
-            return getClipboard().primaryClip;
+            return mPrimaryClip;
         }
     }
 
-    public ClipDescription getPrimaryClipDescription(String callingPackage) {
+    public ClipDescription getPrimaryClipDescription() {
         synchronized (this) {
-            if (mAppOps.checkOp(AppOpsManager.OP_READ_CLIPBOARD, Binder.getCallingUid(),
-                    callingPackage) != AppOpsManager.MODE_ALLOWED) {
-                return null;
-            }
-            PerUserClipboard clipboard = getClipboard();
-            return clipboard.primaryClip != null ? clipboard.primaryClip.getDescription() : null;
+            return mPrimaryClip != null ? mPrimaryClip.getDescription() : null;
         }
     }
 
-    public boolean hasPrimaryClip(String callingPackage) {
+    public boolean hasPrimaryClip() {
         synchronized (this) {
-            if (mAppOps.checkOp(AppOpsManager.OP_READ_CLIPBOARD, Binder.getCallingUid(),
-                    callingPackage) != AppOpsManager.MODE_ALLOWED) {
-                return false;
-            }
-            return getClipboard().primaryClip != null;
+            return mPrimaryClip != null;
         }
     }
 
-    public void addPrimaryClipChangedListener(IOnPrimaryClipChangedListener listener,
-            String callingPackage) {
+    public void addPrimaryClipChangedListener(IOnPrimaryClipChangedListener listener) {
         synchronized (this) {
-            getClipboard().primaryClipListeners.register(listener,
-                    new ListenerInfo(Binder.getCallingUid(), callingPackage));
+            mPrimaryClipListeners.register(listener);
         }
     }
 
     public void removePrimaryClipChangedListener(IOnPrimaryClipChangedListener listener) {
         synchronized (this) {
-            getClipboard().primaryClipListeners.unregister(listener);
+            mPrimaryClipListeners.unregister(listener);
         }
     }
 
-    public boolean hasClipboardText(String callingPackage) {
+    public boolean hasClipboardText() {
         synchronized (this) {
-            if (mAppOps.checkOp(AppOpsManager.OP_READ_CLIPBOARD, Binder.getCallingUid(),
-                    callingPackage) != AppOpsManager.MODE_ALLOWED) {
-                return false;
-            }
-            PerUserClipboard clipboard = getClipboard();
-            if (clipboard.primaryClip != null) {
-                CharSequence text = clipboard.primaryClip.getItemAt(0).getText();
+            if (mPrimaryClip != null) {
+                CharSequence text = mPrimaryClip.getItemAt(0).getText();
                 return text != null && text.length() > 0;
             }
             return false;
@@ -248,6 +152,7 @@ public class ClipboardService extends IClipboard.Stub {
             return;
         }
         long ident = Binder.clearCallingIdentity();
+        boolean allowed = false;
         try {
             // This will throw SecurityException for us.
             mAm.checkGrantUriPermission(uid, null, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -296,30 +201,22 @@ public class ClipboardService extends IClipboard.Stub {
     }
 
     private final void addActiveOwnerLocked(int uid, String pkg) {
-        final IPackageManager pm = AppGlobals.getPackageManager();
-        final int targetUserHandle = UserHandle.getCallingUserId();
-        final long oldIdentity = Binder.clearCallingIdentity();
+        PackageInfo pi;
         try {
-            PackageInfo pi = pm.getPackageInfo(pkg, 0, targetUserHandle);
-            if (pi == null) {
-                throw new IllegalArgumentException("Unknown package " + pkg);
-            }
-            if (!UserHandle.isSameApp(pi.applicationInfo.uid, uid)) {
+            pi = mPm.getPackageInfo(pkg, 0);
+            if (pi.applicationInfo.uid != uid) {
                 throw new SecurityException("Calling uid " + uid
                         + " does not own package " + pkg);
             }
-        } catch (RemoteException e) {
-            // Can't happen; the package manager is in the same process
-        } finally {
-            Binder.restoreCallingIdentity(oldIdentity);
+        } catch (NameNotFoundException e) {
+            throw new IllegalArgumentException("Unknown package " + pkg, e);
         }
-        PerUserClipboard clipboard = getClipboard();
-        if (clipboard.primaryClip != null && !clipboard.activePermissionOwners.contains(pkg)) {
-            final int N = clipboard.primaryClip.getItemCount();
+        if (mPrimaryClip != null && !mActivePermissionOwners.contains(pkg)) {
+            final int N = mPrimaryClip.getItemCount();
             for (int i=0; i<N; i++) {
-                grantItemLocked(clipboard.primaryClip.getItemAt(i), pkg);
+                grantItemLocked(mPrimaryClip.getItemAt(i), pkg);
             }
-            clipboard.activePermissionOwners.add(pkg);
+            mActivePermissionOwners.add(pkg);
         }
     }
 
@@ -346,14 +243,13 @@ public class ClipboardService extends IClipboard.Stub {
     }
 
     private final void clearActiveOwnersLocked() {
-        PerUserClipboard clipboard = getClipboard();
-        clipboard.activePermissionOwners.clear();
-        if (clipboard.primaryClip == null) {
+        mActivePermissionOwners.clear();
+        if (mPrimaryClip == null) {
             return;
         }
-        final int N = clipboard.primaryClip.getItemCount();
+        final int N = mPrimaryClip.getItemCount();
         for (int i=0; i<N; i++) {
-            revokeItemLocked(clipboard.primaryClip.getItemAt(i));
+            revokeItemLocked(mPrimaryClip.getItemAt(i));
         }
     }
 }

@@ -16,6 +16,7 @@
 
 package com.android.server.am;
 
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
@@ -23,8 +24,8 @@ import com.android.internal.util.MemInfoReader;
 import com.android.server.wm.WindowManagerService;
 
 import android.graphics.Point;
+import android.os.StrictMode;
 import android.util.Slog;
-import android.view.Display;
 
 /**
  * Activity manager code dealing with processes.
@@ -36,31 +37,27 @@ class ProcessList {
 
     // OOM adjustments for processes in various states:
 
+    // This is a process without anything currently running in it.  Definitely
+    // the first to go! Value set in system/rootdir/init.rc on startup.
+    // This value is initalized in the constructor, careful when refering to
+    // this static variable externally.
+    static final int EMPTY_APP_ADJ = 15;
+
     // This is a process only hosting activities that are not visible,
-    // so it can be killed without any disruption.
+    // so it can be killed without any disruption. Value set in
+    // system/rootdir/init.rc on startup.
     static final int HIDDEN_APP_MAX_ADJ = 15;
-    static int HIDDEN_APP_MIN_ADJ = 9;
-
-    // The B list of SERVICE_ADJ -- these are the old and decrepit
-    // services that aren't as shiny and interesting as the ones in the A list.
-    static final int SERVICE_B_ADJ = 8;
-
-    // This is the process of the previous application that the user was in.
-    // This process is kept above other things, because it is very common to
-    // switch back to the previous app.  This is important both for recent
-    // task switch (toggling between the two top recent apps) as well as normal
-    // UI flow such as clicking on a URI in the e-mail app to view in the browser,
-    // and then pressing back to return to e-mail.
-    static final int PREVIOUS_APP_ADJ = 7;
+    static int HIDDEN_APP_MIN_ADJ = 7;
 
     // This is a process holding the home application -- we want to try
     // avoiding killing it, even if it would normally be in the background,
     // because the user interacts with it so much.
     static final int HOME_APP_ADJ = 6;
 
-    // This is a process holding an application service -- killing it will not
-    // have much of an impact as far as the user is concerned.
-    static final int SERVICE_ADJ = 5;
+    // This is a process holding a secondary server -- killing it will not
+    // have much of an impact as far as the user is concerned. Value set in
+    // system/rootdir/init.rc on startup.
+    static final int SECONDARY_SERVER_ADJ = 5;
 
     // This is a process currently hosting a backup operation.  Killing it
     // is not entirely fatal but is generally a bad idea.
@@ -73,20 +70,22 @@ class ProcessList {
 
     // This is a process only hosting components that are perceptible to the
     // user, and we really want to avoid killing them, but they are not
-    // immediately visible. An example is background music playback.
+    // immediately visible. An example is background music playback.  Value set in
+    // system/rootdir/init.rc on startup.
     static final int PERCEPTIBLE_APP_ADJ = 2;
 
     // This is a process only hosting activities that are visible to the
-    // user, so we'd prefer they don't disappear.
+    // user, so we'd prefer they don't disappear. Value set in
+    // system/rootdir/init.rc on startup.
     static final int VISIBLE_APP_ADJ = 1;
 
     // This is the process running the current foreground app.  We'd really
-    // rather not kill it!
+    // rather not kill it! Value set in system/rootdir/init.rc on startup.
     static final int FOREGROUND_APP_ADJ = 0;
 
-    // This is a system persistent process, such as telephony.  Definitely
+    // This is a process running a core server, such as telephony.  Definitely
     // don't want to kill it, but doing so is not completely fatal.
-    static final int PERSISTENT_PROC_ADJ = -12;
+    static final int CORE_SERVER_ADJ = -12;
 
     // The system process runs at the default adjustment.
     static final int SYSTEM_ADJ = -16;
@@ -101,24 +100,7 @@ class ProcessList {
     // The maximum number of hidden processes we will keep around before
     // killing them; this is just a control to not let us go too crazy with
     // keeping around processes on devices with large amounts of RAM.
-    static final int MAX_HIDDEN_APPS = 24;
-
-    // We allow empty processes to stick around for at most 30 minutes.
-    static final long MAX_EMPTY_TIME = 30*60*1000;
-
-    // The number of hidden at which we don't consider it necessary to do
-    // memory trimming.
-    static final int TRIM_HIDDEN_APPS = 3;
-
-    // The number of empty apps at which we don't consider it necessary to do
-    // memory trimming.
-    static final int TRIM_EMPTY_APPS = 3;
-
-    // Threshold of number of hidden+empty where we consider memory critical.
-    static final int TRIM_CRITICAL_THRESHOLD = 3;
-
-    // Threshold of number of hidden+empty where we consider memory critical.
-    static final int TRIM_LOW_THRESHOLD = 5;
+    static final int MAX_HIDDEN_APPS = 15;
 
     // We put empty content processes after any hidden processes that have
     // been idle for less than 15 seconds.
@@ -133,7 +115,7 @@ class ProcessList {
     // can't give it a different value for every possible kind of process.
     private final int[] mOomAdj = new int[] {
             FOREGROUND_APP_ADJ, VISIBLE_APP_ADJ, PERCEPTIBLE_APP_ADJ,
-            BACKUP_APP_ADJ, HIDDEN_APP_MIN_ADJ, HIDDEN_APP_MAX_ADJ
+            BACKUP_APP_ADJ, HIDDEN_APP_MIN_ADJ, EMPTY_APP_ADJ
     };
     // These are the low-end OOM level limits.  This is appropriate for an
     // HVGA or smaller phone with less than 512MB.  Values are in KB.
@@ -144,8 +126,8 @@ class ProcessList {
     // These are the high-end OOM level limits.  This is appropriate for a
     // 1280x800 or larger screen with around 1GB RAM.  Values are in KB.
     private final long[] mOomMinFreeHigh = new long[] {
-            49152, 61440, 73728,
-            86016, 98304, 122880
+            32768, 40960, 49152,
+            57344, 65536, 81920
     };
     // The actual OOM killer memory levels we are using.
     private final long[] mOomMinFree = new long[mOomAdj.length];
@@ -164,7 +146,7 @@ class ProcessList {
     void applyDisplaySize(WindowManagerService wm) {
         if (!mHaveDisplaySize) {
             Point p = new Point();
-            wm.getInitialDisplaySize(Display.DEFAULT_DISPLAY, p);
+            wm.getInitialDisplaySize(p);
             if (p.x != 0 && p.y != 0) {
                 updateOomLevels(p.x, p.y, true);
                 mHaveDisplaySize = true;

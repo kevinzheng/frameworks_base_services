@@ -16,7 +16,6 @@
 
 package com.android.server.am;
 
-import android.os.SELinux;
 import android.util.Slog;
 
 import java.io.*;
@@ -80,9 +79,6 @@ class DeviceMonitor {
     static {
         if (!BASE.isDirectory() && !BASE.mkdirs()) {
             throw new AssertionError("Couldn't create " + BASE + ".");
-        }
-        if (!SELinux.restorecon(BASE)) {
-            throw new AssertionError("Couldn't restorecon " + BASE + ".");
         }
     }
 

@@ -16,25 +16,20 @@
 
 package com.android.server.wm;
 
-import com.android.server.input.InputApplicationHandle;
-import com.android.server.input.InputWindowHandle;
-import com.android.server.wm.WindowManagerService.DragInputEventReceiver;
 import com.android.server.wm.WindowManagerService.H;
 
 import android.content.ClipData;
 import android.content.ClipDescription;
-import android.graphics.Point;
 import android.graphics.Region;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
 import android.util.Slog;
-import android.view.Display;
 import android.view.DragEvent;
 import android.view.InputChannel;
+import android.view.InputQueue;
 import android.view.Surface;
-import android.view.SurfaceControl;
 import android.view.View;
 import android.view.WindowManager;
 
@@ -46,7 +41,7 @@ import java.util.ArrayList;
 class DragState {
     final WindowManagerService mService;
     IBinder mToken;
-    SurfaceControl mSurfaceControl;
+    Surface mSurface;
     int mFlags;
     IBinder mLocalWin;
     ClipData mData;
@@ -55,31 +50,29 @@ class DragState {
     float mCurrentX, mCurrentY;
     float mThumbOffsetX, mThumbOffsetY;
     InputChannel mServerChannel, mClientChannel;
-    DragInputEventReceiver mInputEventReceiver;
     InputApplicationHandle mDragApplicationHandle;
     InputWindowHandle mDragWindowHandle;
     WindowState mTargetWindow;
     ArrayList<WindowState> mNotifiedWindows;
     boolean mDragInProgress;
-    Display mDisplay;
 
     private final Region mTmpRegion = new Region();
 
-    DragState(WindowManagerService service, IBinder token, SurfaceControl surface,
+    DragState(WindowManagerService service, IBinder token, Surface surface,
             int flags, IBinder localWin) {
         mService = service;
         mToken = token;
-        mSurfaceControl = surface;
+        mSurface = surface;
         mFlags = flags;
         mLocalWin = localWin;
         mNotifiedWindows = new ArrayList<WindowState>();
     }
 
     void reset() {
-        if (mSurfaceControl != null) {
-            mSurfaceControl.destroy();
+        if (mSurface != null) {
+            mSurface.destroy();
         }
-        mSurfaceControl = null;
+        mSurface = null;
         mFlags = 0;
         mLocalWin = null;
         mToken = null;
@@ -88,11 +81,7 @@ class DragState {
         mNotifiedWindows = null;
     }
 
-    /**
-     * @param display The Display that the window being dragged is on.
-     */
-    void register(Display display) {
-        mDisplay = display;
+    void register() {
         if (WindowManagerService.DEBUG_DRAG) Slog.d(WindowManagerService.TAG, "registering drag input channel");
         if (mClientChannel != null) {
             Slog.e(WindowManagerService.TAG, "Duplicate register of drag input channel");
@@ -101,16 +90,15 @@ class DragState {
             mServerChannel = channels[0];
             mClientChannel = channels[1];
             mService.mInputManager.registerInputChannel(mServerChannel, null);
-            mInputEventReceiver = mService.new DragInputEventReceiver(mClientChannel,
-                    mService.mH.getLooper());
+            InputQueue.registerInputChannel(mClientChannel, mService.mDragInputHandler,
+                    mService.mH.getLooper().getQueue());
 
             mDragApplicationHandle = new InputApplicationHandle(null);
             mDragApplicationHandle.name = "drag";
             mDragApplicationHandle.dispatchingTimeoutNanos =
                     WindowManagerService.DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
 
-            mDragWindowHandle = new InputWindowHandle(mDragApplicationHandle, null,
-                    mDisplay.getDisplayId());
+            mDragWindowHandle = new InputWindowHandle(mDragApplicationHandle, null);
             mDragWindowHandle.name = "drag";
             mDragWindowHandle.inputChannel = mServerChannel;
             mDragWindowHandle.layer = getDragLayerLw();
@@ -134,10 +122,8 @@ class DragState {
             // The drag window covers the entire display
             mDragWindowHandle.frameLeft = 0;
             mDragWindowHandle.frameTop = 0;
-            Point p = new Point();
-            mDisplay.getRealSize(p);
-            mDragWindowHandle.frameRight = p.x;
-            mDragWindowHandle.frameBottom = p.y;
+            mDragWindowHandle.frameRight = mService.mCurDisplayWidth;
+            mDragWindowHandle.frameBottom = mService.mCurDisplayHeight;
 
             // Pause rotations before a drag.
             if (WindowManagerService.DEBUG_ORIENTATION) {
@@ -153,8 +139,7 @@ class DragState {
             Slog.e(WindowManagerService.TAG, "Unregister of nonexistent drag input channel");
         } else {
             mService.mInputManager.unregisterInputChannel(mServerChannel);
-            mInputEventReceiver.dispose();
-            mInputEventReceiver = null;
+            InputQueue.unregisterInputChannel(mClientChannel);
             mClientChannel.dispose();
             mServerChannel.dispose();
             mClientChannel = null;
@@ -190,12 +175,9 @@ class DragState {
             Slog.d(WindowManagerService.TAG, "broadcasting DRAG_STARTED at (" + touchX + ", " + touchY + ")");
         }
 
-        final WindowList windows = mService.getWindowListLocked(mDisplay);
-        if (windows != null) {
-            final int N = windows.size();
-            for (int i = 0; i < N; i++) {
-                sendDragStartedLw(windows.get(i), touchX, touchY, mDataDescription);
-            }
+        final int N = mService.mWindows.size();
+        for (int i = 0; i < N; i++) {
+            sendDragStartedLw(mService.mWindows.get(i), touchX, touchY, mDataDescription);
         }
     }
 
@@ -294,14 +276,14 @@ class DragState {
         // Move the surface to the given touch
         if (WindowManagerService.SHOW_LIGHT_TRANSACTIONS) Slog.i(
                 WindowManagerService.TAG, ">>> OPEN TRANSACTION notifyMoveLw");
-        SurfaceControl.openTransaction();
+        Surface.openTransaction();
         try {
-            mSurfaceControl.setPosition(x - mThumbOffsetX, y - mThumbOffsetY);
+            mSurface.setPosition(x - mThumbOffsetX, y - mThumbOffsetY);
             if (WindowManagerService.SHOW_TRANSACTIONS) Slog.i(WindowManagerService.TAG, "  DRAG "
-                    + mSurfaceControl + ": pos=(" +
+                    + mSurface + ": pos=(" +
                     (int)(x - mThumbOffsetX) + "," + (int)(y - mThumbOffsetY) + ")");
         } finally {
-            SurfaceControl.closeTransaction();
+            Surface.closeTransaction();
             if (WindowManagerService.SHOW_LIGHT_TRANSACTIONS) Slog.i(
                     WindowManagerService.TAG, "<<< CLOSE TRANSACTION notifyMoveLw");
         }
@@ -394,11 +376,7 @@ class DragState {
         WindowState touchedWin = null;
         final int x = (int) xf;
         final int y = (int) yf;
-
-        final WindowList windows = mService.getWindowListLocked(mDisplay);
-        if (windows == null) {
-            return null;
-        }
+        final ArrayList<WindowState> windows = mService.mWindows;
         final int N = windows.size();
         for (int i = N - 1; i >= 0; i--) {
             WindowState child = windows.get(i);

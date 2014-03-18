@@ -16,70 +16,91 @@
 
 package com.android.server.location;
 
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.location.Address;
 import android.location.GeocoderParams;
 import android.location.IGeocodeProvider;
-import android.os.Handler;
+import android.os.IBinder;
 import android.os.RemoteException;
-import android.os.UserHandle;
+import android.os.SystemClock;
 import android.util.Log;
 
-import com.android.server.ServiceWatcher;
 import java.util.List;
 
 /**
- * Proxy for IGeocodeProvider implementations.
+ * A class for proxying IGeocodeProvider implementations.
+ *
+ * {@hide}
  */
 public class GeocoderProxy {
+
     private static final String TAG = "GeocoderProxy";
 
-    private static final String SERVICE_ACTION = "com.android.location.service.GeocodeProvider";
-
     private final Context mContext;
-    private final ServiceWatcher mServiceWatcher;
+    private final Intent mIntent;
+    private final Object mMutex = new Object();  // synchronizes access to mServiceConnection
+    private Connection mServiceConnection = new Connection();  // never null
 
-    public static GeocoderProxy createAndBind(Context context,
-            int overlaySwitchResId, int defaultServicePackageNameResId,
-            int initialPackageNamesResId, Handler handler) {
-        GeocoderProxy proxy = new GeocoderProxy(context, overlaySwitchResId,
-            defaultServicePackageNameResId, initialPackageNamesResId, handler);
-        if (proxy.bind()) {
-            return proxy;
-        } else {
-            return null;
+    public GeocoderProxy(Context context, String serviceName) {
+        mContext = context;
+        mIntent = new Intent(serviceName);
+        mContext.bindService(mIntent, mServiceConnection,
+                Context.BIND_AUTO_CREATE | Context.BIND_NOT_FOREGROUND
+                | Context.BIND_ALLOW_OOM_MANAGEMENT);
+    }
+
+    /**
+     * When unbundled NetworkLocationService package is updated, we
+     * need to unbind from the old version and re-bind to the new one.
+     */
+    public void reconnect() {
+        synchronized (mMutex) {
+            mContext.unbindService(mServiceConnection);
+            mServiceConnection = new Connection();
+            mContext.bindService(mIntent, mServiceConnection,
+                    Context.BIND_AUTO_CREATE | Context.BIND_NOT_FOREGROUND
+                    | Context.BIND_ALLOW_OOM_MANAGEMENT);
         }
     }
 
-    private GeocoderProxy(Context context,
-            int overlaySwitchResId, int defaultServicePackageNameResId,
-            int initialPackageNamesResId, Handler handler) {
-        mContext = context;
+    private class Connection implements ServiceConnection {
 
-        mServiceWatcher = new ServiceWatcher(mContext, TAG, SERVICE_ACTION, overlaySwitchResId,
-            defaultServicePackageNameResId, initialPackageNamesResId, null, handler);
-    }
+        private IGeocodeProvider mProvider;
 
-    private boolean bind () {
-        return mServiceWatcher.start();
-    }
+        public void onServiceConnected(ComponentName className, IBinder service) {
+            synchronized (this) {
+                mProvider = IGeocodeProvider.Stub.asInterface(service);
+            }
+        }
 
-    private IGeocodeProvider getService() {
-        return IGeocodeProvider.Stub.asInterface(mServiceWatcher.getBinder());
-    }
+        public void onServiceDisconnected(ComponentName className) {
+            synchronized (this) {
+                mProvider = null;
+            }
+        }
 
-    public String getConnectedPackageName() {
-        return mServiceWatcher.getBestPackageName();
+        public IGeocodeProvider getProvider() {
+            synchronized (this) {
+                return mProvider;
+            }
+        }
     }
 
     public String getFromLocation(double latitude, double longitude, int maxResults,
             GeocoderParams params, List<Address> addrs) {
-        IGeocodeProvider provider = getService();
+        IGeocodeProvider provider;
+        synchronized (mMutex) {
+            provider = mServiceConnection.getProvider();
+        }
         if (provider != null) {
             try {
-                return provider.getFromLocation(latitude, longitude, maxResults, params, addrs);
+                return provider.getFromLocation(latitude, longitude, maxResults,
+                        params, addrs);
             } catch (RemoteException e) {
-                Log.w(TAG, e);
+                Log.e(TAG, "getFromLocation failed", e);
             }
         }
         return "Service not Available";
@@ -89,17 +110,19 @@ public class GeocoderProxy {
             double lowerLeftLatitude, double lowerLeftLongitude,
             double upperRightLatitude, double upperRightLongitude, int maxResults,
             GeocoderParams params, List<Address> addrs) {
-        IGeocodeProvider provider = getService();
+        IGeocodeProvider provider;
+        synchronized (mMutex) {
+            provider = mServiceConnection.getProvider();
+        }
         if (provider != null) {
             try {
                 return provider.getFromLocationName(locationName, lowerLeftLatitude,
                         lowerLeftLongitude, upperRightLatitude, upperRightLongitude,
                         maxResults, params, addrs);
             } catch (RemoteException e) {
-                Log.w(TAG, e);
+                Log.e(TAG, "getFromLocationName failed", e);
             }
         }
         return "Service not Available";
     }
-
 }

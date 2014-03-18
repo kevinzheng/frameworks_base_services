@@ -20,16 +20,13 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.IPackageManager;
+import android.net.Downloads;
 import android.os.Build;
 import android.os.DropBoxManager;
 import android.os.FileObserver;
 import android.os.FileUtils;
 import android.os.RecoverySystem;
-import android.os.RemoteException;
-import android.os.ServiceManager;
 import android.os.SystemProperties;
-import android.provider.Downloads;
 import android.util.Slog;
 
 import java.io.File;
@@ -42,10 +39,8 @@ import java.io.IOException;
 public class BootReceiver extends BroadcastReceiver {
     private static final String TAG = "BootReceiver";
 
-    // Maximum size of a logged event (files get truncated if they're longer).
-    // Give userdebug builds a larger max to capture extra debug, esp. for last_kmsg.
-    private static final int LOG_SIZE =
-        SystemProperties.getInt("ro.debuggable", 0) == 1 ? 98304 : 65536;
+    // Maximum size of a logged event (files get truncated if they're longer)
+    private static final int LOG_SIZE = 65536;
 
     private static final File TOMBSTONE_DIR = new File("/data/tombstones");
 
@@ -72,15 +67,7 @@ public class BootReceiver extends BroadcastReceiver {
                     Slog.e(TAG, "Can't log boot events", e);
                 }
                 try {
-                    boolean onlyCore = false;
-                    try {
-                        onlyCore = IPackageManager.Stub.asInterface(ServiceManager.getService(
-                                "package")).isOnlyCoreApps();
-                    } catch (RemoteException e) {
-                    }
-                    if (!onlyCore) {
-                        removeOldUpdatePackages(context);
-                    }
+                    removeOldUpdatePackages(context);
                 } catch (Exception e) {
                     Slog.e(TAG, "Can't remove old update packages", e);
                 }
@@ -89,8 +76,9 @@ public class BootReceiver extends BroadcastReceiver {
         }.start();
     }
 
-    private void removeOldUpdatePackages(Context context) {
-        Downloads.removeAllDownloadsByPackage(context, OLD_UPDATER_PACKAGE, OLD_UPDATER_CLASS);
+    private void removeOldUpdatePackages(Context ctx) {
+        Downloads.ByUri.removeAllDownloadsByPackage(
+            ctx, OLD_UPDATER_PACKAGE, OLD_UPDATER_CLASS);
     }
 
     private void logBootEvents(Context ctx) throws IOException {
@@ -99,8 +87,6 @@ public class BootReceiver extends BroadcastReceiver {
         final String headers = new StringBuilder(512)
             .append("Build: ").append(Build.FINGERPRINT).append("\n")
             .append("Hardware: ").append(Build.BOARD).append("\n")
-            .append("Revision: ")
-            .append(SystemProperties.get("ro.revision", "")).append("\n")
             .append("Bootloader: ").append(Build.BOOTLOADER).append("\n")
             .append("Radio: ").append(Build.RADIO).append("\n")
             .append("Kernel: ")
@@ -126,7 +112,6 @@ public class BootReceiver extends BroadcastReceiver {
                     -LOG_SIZE, "APANIC_CONSOLE");
             addFileToDropBox(db, prefs, headers, "/data/dontpanic/apanic_threads",
                     -LOG_SIZE, "APANIC_THREADS");
-            addAuditErrorsToDropBox(db, prefs, headers, -LOG_SIZE, "SYSTEM_AUDIT");
         } else {
             if (db != null) db.addText("SYSTEM_RESTART", headers);
         }
@@ -174,33 +159,5 @@ public class BootReceiver extends BroadcastReceiver {
 
         Slog.i(TAG, "Copying " + filename + " to DropBox (" + tag + ")");
         db.addText(tag, headers + FileUtils.readTextFile(file, maxSize, "[[TRUNCATED]]\n"));
-    }
-
-    private static void addAuditErrorsToDropBox(DropBoxManager db,  SharedPreferences prefs,
-            String headers, int maxSize, String tag) throws IOException {
-        if (db == null || !db.isTagEnabled(tag)) return;  // Logging disabled
-        Slog.i(TAG, "Copying audit failures to DropBox");
-
-        File file = new File("/proc/last_kmsg");
-        long fileTime = file.lastModified();
-        if (fileTime <= 0) return;  // File does not exist
-
-        if (prefs != null) {
-            long lastTime = prefs.getLong(tag, 0);
-            if (lastTime == fileTime) return;  // Already logged this particular file
-            // TODO: move all these SharedPreferences Editor commits
-            // outside this function to the end of logBootEvents
-            prefs.edit().putLong(tag, fileTime).apply();
-        }
-
-        String log = FileUtils.readTextFile(file, maxSize, "[[TRUNCATED]]\n");
-        StringBuilder sb = new StringBuilder();
-        for (String line : log.split("\n")) {
-            if (line.contains("audit")) {
-                sb.append(line + "\n");
-            }
-        }
-        Slog.i(TAG, "Copied " + sb.toString().length() + " worth of audits to DropBox");
-        db.addText(tag, headers + sb.toString());
     }
 }

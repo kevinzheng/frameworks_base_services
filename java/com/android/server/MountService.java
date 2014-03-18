@@ -16,7 +16,10 @@
 
 package com.android.server;
 
-import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import com.android.internal.app.IMediaContainerService;
+import com.android.internal.util.XmlUtils;
+import com.android.server.am.ActivityManagerService;
+import com.android.server.pm.PackageManagerService;
 
 import android.Manifest;
 import android.content.BroadcastReceiver;
@@ -26,7 +29,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
-import android.content.pm.UserInfo;
 import android.content.res.ObbInfo;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
@@ -35,17 +37,16 @@ import android.hardware.usb.UsbManager;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Environment;
-import android.os.Environment.UserEnvironment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
-import android.os.UserHandle;
 import android.os.storage.IMountService;
 import android.os.storage.IMountServiceListener;
 import android.os.storage.IMountShutdownObserver;
@@ -58,22 +59,9 @@ import android.util.AttributeSet;
 import android.util.Slog;
 import android.util.Xml;
 
-import com.android.internal.annotations.GuardedBy;
-import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.app.IMediaContainerService;
-import com.android.internal.util.Preconditions;
-import com.android.internal.util.XmlUtils;
-import com.android.server.NativeDaemonConnector.Command;
-import com.android.server.NativeDaemonConnector.SensitiveArg;
-import com.android.server.am.ActivityManagerService;
-import com.android.server.pm.PackageManagerService;
-import com.android.server.pm.UserManagerService;
-import com.google.android.collect.Lists;
-import com.google.android.collect.Maps;
-
+import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
-import java.io.File;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -89,8 +77,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.Set;
 
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
@@ -104,8 +91,6 @@ import javax.crypto.spec.PBEKeySpec;
  */
 class MountService extends IMountService.Stub
         implements INativeDaemonConnectorCallbacks, Watchdog.Monitor {
-
-    // TODO: listen for user creation/deletion
 
     private static final boolean LOCAL_LOGD = false;
     private static final boolean DEBUG_UNMOUNT = false;
@@ -175,41 +160,26 @@ class MountService extends IMountService.Stub
         public static final int VolumeDiskInserted             = 630;
         public static final int VolumeDiskRemoved              = 631;
         public static final int VolumeBadRemoval               = 632;
-
-        /*
-         * 700 series - fstrim
-         */
-        public static final int FstrimCompleted                = 700;
     }
 
-    private Context mContext;
-    private NativeDaemonConnector mConnector;
-
-    private final Object mVolumesLock = new Object();
-
-    /** When defined, base template for user-specific {@link StorageVolume}. */
-    private StorageVolume mEmulatedTemplate;
-
-    @GuardedBy("mVolumesLock")
-    private final ArrayList<StorageVolume> mVolumes = Lists.newArrayList();
-    /** Map from path to {@link StorageVolume} */
-    @GuardedBy("mVolumesLock")
-    private final HashMap<String, StorageVolume> mVolumesByPath = Maps.newHashMap();
-    /** Map from path to state */
-    @GuardedBy("mVolumesLock")
-    private final HashMap<String, String> mVolumeStates = Maps.newHashMap();
-
-    private volatile boolean mSystemReady = false;
-
+    private Context                               mContext;
+    private NativeDaemonConnector                 mConnector;
+    private final ArrayList<StorageVolume>        mVolumes = new ArrayList<StorageVolume>();
+    private StorageVolume                         mPrimaryVolume;
+    private final HashMap<String, String>         mVolumeStates = new HashMap<String, String>();
+    private final HashMap<String, StorageVolume>  mVolumeMap = new HashMap<String, StorageVolume>();
+    private String                                mExternalStoragePath;
     private PackageManagerService                 mPms;
     private boolean                               mUmsEnabling;
     private boolean                               mUmsAvailable = false;
     // Used as a lock for methods that register/unregister listeners.
     final private ArrayList<MountServiceBinderListener> mListeners =
             new ArrayList<MountServiceBinderListener>();
-    private final CountDownLatch mConnectedSignal = new CountDownLatch(1);
-    private final CountDownLatch mAsecsScanned = new CountDownLatch(1);
+    private boolean                               mBooted = false;
+    private boolean                               mReady = false;
     private boolean                               mSendUmsConnectedOnBoot = false;
+    // true if we should fake MEDIA_MOUNTED state for external storage
+    private boolean                               mEmulateExternalStorage = false;
 
     /**
      * Private hash of currently mounted secure containers.
@@ -234,31 +204,22 @@ class MountService extends IMountService.Stub
      * OBBs.
      */
     final private Map<IBinder, List<ObbState>> mObbMounts = new HashMap<IBinder, List<ObbState>>();
-
-    /** Map from raw paths to {@link ObbState}. */
     final private Map<String, ObbState> mObbPathToStateMap = new HashMap<String, ObbState>();
 
     class ObbState implements IBinder.DeathRecipient {
-        public ObbState(String rawPath, String canonicalPath, int callingUid,
-                IObbActionListener token, int nonce) {
-            this.rawPath = rawPath;
-            this.canonicalPath = canonicalPath.toString();
-
-            final int userId = UserHandle.getUserId(callingUid);
-            this.ownerPath = buildObbPath(canonicalPath, userId, false);
-            this.voldPath = buildObbPath(canonicalPath, userId, true);
-
-            this.ownerGid = UserHandle.getSharedAppGid(callingUid);
+        public ObbState(String filename, int callerUid, IObbActionListener token, int nonce)
+                throws RemoteException {
+            this.filename = filename;
+            this.callerUid = callerUid;
             this.token = token;
             this.nonce = nonce;
         }
 
-        final String rawPath;
-        final String canonicalPath;
-        final String ownerPath;
-        final String voldPath;
+        // OBB source filename
+        String filename;
 
-        final int ownerGid;
+        // Binder.callingUid()
+        final public int callerUid;
 
         // Token of remote Binder caller
         final IObbActionListener token;
@@ -287,13 +248,12 @@ class MountService extends IMountService.Stub
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder("ObbState{");
-            sb.append("rawPath=").append(rawPath);
-            sb.append(",canonicalPath=").append(canonicalPath);
-            sb.append(",ownerPath=").append(ownerPath);
-            sb.append(",voldPath=").append(voldPath);
-            sb.append(",ownerGid=").append(ownerGid);
-            sb.append(",token=").append(token);
-            sb.append(",binder=").append(getBinder());
+            sb.append("filename=");
+            sb.append(filename);
+            sb.append(",token=");
+            sb.append(token.toString());
+            sb.append(",callerUid=");
+            sb.append(callerUid);
             sb.append('}');
             return sb.toString();
         }
@@ -338,8 +298,6 @@ class MountService extends IMountService.Stub
     private static final int H_UNMOUNT_PM_UPDATE = 1;
     private static final int H_UNMOUNT_PM_DONE = 2;
     private static final int H_UNMOUNT_MS = 3;
-    private static final int H_SYSTEM_READY = 4;
-
     private static final int RETRY_UNMOUNT_DELAY = 30; // in ms
     private static final int MAX_UNMOUNT_RETRIES = 4;
 
@@ -474,156 +432,114 @@ class MountService extends IMountService.Stub
                     }
                     break;
                 }
-                case H_UNMOUNT_MS: {
+                case H_UNMOUNT_MS : {
                     if (DEBUG_UNMOUNT) Slog.i(TAG, "H_UNMOUNT_MS");
                     UnmountCallBack ucb = (UnmountCallBack) msg.obj;
                     ucb.handleFinished();
                     break;
                 }
-                case H_SYSTEM_READY: {
-                    try {
-                        handleSystemReady();
-                    } catch (Exception ex) {
-                        Slog.e(TAG, "Boot-time mount exception", ex);
-                    }
-                    break;
-                }
             }
         }
     };
-
-    private final HandlerThread mHandlerThread;
-    private final Handler mHandler;
-
-    void waitForAsecScan() {
-        waitForLatch(mAsecsScanned);
-    }
+    final private HandlerThread mHandlerThread;
+    final private Handler mHandler;
 
     private void waitForReady() {
-        waitForLatch(mConnectedSignal);
-    }
-
-    private void waitForLatch(CountDownLatch latch) {
-        for (;;) {
-            try {
-                if (latch.await(5000, TimeUnit.MILLISECONDS)) {
+        while (mReady == false) {
+            for (int retries = 5; retries > 0; retries--) {
+                if (mReady) {
                     return;
-                } else {
-                    Slog.w(TAG, "Thread " + Thread.currentThread().getName()
-                            + " still waiting for MountService ready...");
                 }
-            } catch (InterruptedException e) {
-                Slog.w(TAG, "Interrupt while waiting for MountService to be ready.");
+                SystemClock.sleep(1000);
             }
+            Slog.w(TAG, "Waiting too long for mReady!");
         }
     }
 
-    private void handleSystemReady() {
-        // Snapshot current volume states since it's not safe to call into vold
-        // while holding locks.
-        final HashMap<String, String> snapshot;
-        synchronized (mVolumesLock) {
-            snapshot = new HashMap<String, String>(mVolumeStates);
-        }
-
-        for (Map.Entry<String, String> entry : snapshot.entrySet()) {
-            final String path = entry.getKey();
-            final String state = entry.getValue();
-
-            if (state.equals(Environment.MEDIA_UNMOUNTED)) {
-                int rc = doMountVolume(path);
-                if (rc != StorageResultCode.OperationSucceeded) {
-                    Slog.e(TAG, String.format("Boot-time mount failed (%d)",
-                            rc));
-                }
-            } else if (state.equals(Environment.MEDIA_SHARED)) {
-                /*
-                 * Bootstrap UMS enabled state since vold indicates
-                 * the volume is shared (runtime restart while ums enabled)
-                 */
-                notifyVolumeStateChange(null, path, VolumeState.NoMedia,
-                        VolumeState.Shared);
-            }
-        }
-
-        // Push mounted state for all emulated storage
-        synchronized (mVolumesLock) {
-            for (StorageVolume volume : mVolumes) {
-                if (volume.isEmulated()) {
-                    updatePublicVolumeState(volume, Environment.MEDIA_MOUNTED);
-                }
-            }
-        }
-
-        /*
-         * If UMS was connected on boot, send the connected event
-         * now that we're up.
-         */
-        if (mSendUmsConnectedOnBoot) {
-            sendUmsIntent(true);
-            mSendUmsConnectedOnBoot = false;
-        }
-    }
-
-    private final BroadcastReceiver mUserReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            final int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1);
-            if (userId == -1) return;
-            final UserHandle user = new UserHandle(userId);
+            String action = intent.getAction();
 
-            final String action = intent.getAction();
-            if (Intent.ACTION_USER_ADDED.equals(action)) {
-                synchronized (mVolumesLock) {
-                    createEmulatedVolumeForUserLocked(user);
+            if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
+                mBooted = true;
+
+                /*
+                 * In the simulator, we need to broadcast a volume mounted event
+                 * to make the media scanner run.
+                 */
+                if ("simulator".equals(SystemProperties.get("ro.product.device"))) {
+                    notifyVolumeStateChange(null, "/sdcard", VolumeState.NoMedia,
+                            VolumeState.Mounted);
+                    return;
                 }
+                new Thread() {
+                    @Override
+                    public void run() {
+                        try {
+                            // it is not safe to call vold with mVolumeStates locked
+                            // so we make a copy of the paths and states and process them
+                            // outside the lock
+                            String[] paths;
+                            String[] states;
+                            int count;
+                            synchronized (mVolumeStates) {
+                                Set<String> keys = mVolumeStates.keySet();
+                                count = keys.size();
+                                paths = keys.toArray(new String[count]);
+                                states = new String[count];
+                                for (int i = 0; i < count; i++) {
+                                    states[i] = mVolumeStates.get(paths[i]);
+                                }
+                            }
 
-            } else if (Intent.ACTION_USER_REMOVED.equals(action)) {
-                synchronized (mVolumesLock) {
-                    final List<StorageVolume> toRemove = Lists.newArrayList();
-                    for (StorageVolume volume : mVolumes) {
-                        if (user.equals(volume.getOwner())) {
-                            toRemove.add(volume);
+                            for (int i = 0; i < count; i++) {
+                                String path = paths[i];
+                                String state = states[i];
+
+                                if (state.equals(Environment.MEDIA_UNMOUNTED)) {
+                                    int rc = doMountVolume(path);
+                                    if (rc != StorageResultCode.OperationSucceeded) {
+                                        Slog.e(TAG, String.format("Boot-time mount failed (%d)",
+                                                rc));
+                                    }
+                                } else if (state.equals(Environment.MEDIA_SHARED)) {
+                                    /*
+                                     * Bootstrap UMS enabled state since vold indicates
+                                     * the volume is shared (runtime restart while ums enabled)
+                                     */
+                                    notifyVolumeStateChange(null, path, VolumeState.NoMedia,
+                                            VolumeState.Shared);
+                                }
+                            }
+
+                            /* notify external storage has mounted to trigger media scanner */
+                            if (mEmulateExternalStorage) {
+                                notifyVolumeStateChange(null,
+                                        Environment.getExternalStorageDirectory().getPath(),
+                                        VolumeState.NoMedia, VolumeState.Mounted);
+                            }
+
+                            /*
+                             * If UMS was connected on boot, send the connected event
+                             * now that we're up.
+                             */
+                            if (mSendUmsConnectedOnBoot) {
+                                sendUmsIntent(true);
+                                mSendUmsConnectedOnBoot = false;
+                            }
+                        } catch (Exception ex) {
+                            Slog.e(TAG, "Boot-time mount exception", ex);
                         }
                     }
-                    for (StorageVolume volume : toRemove) {
-                        removeVolumeLocked(volume);
-                    }
-                }
+                }.start();
+            } else if (action.equals(UsbManager.ACTION_USB_STATE)) {
+                boolean available = (intent.getBooleanExtra(UsbManager.USB_CONNECTED, false) &&
+                        intent.getBooleanExtra(UsbManager.USB_FUNCTION_MASS_STORAGE, false));
+                notifyShareAvailabilityChange(available);
             }
         }
     };
-
-    private final BroadcastReceiver mUsbReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            boolean available = (intent.getBooleanExtra(UsbManager.USB_CONNECTED, false) &&
-                    intent.getBooleanExtra(UsbManager.USB_FUNCTION_MASS_STORAGE, false));
-            notifyShareAvailabilityChange(available);
-        }
-    };
-
-    private final BroadcastReceiver mIdleMaintenanceReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            waitForReady();
-            String action = intent.getAction();
-            // Since fstrim will be run on a daily basis we do not expect
-            // fstrim to be too long, so it is not interruptible. We will
-            // implement interruption only in case we see issues.
-            if (Intent.ACTION_IDLE_MAINTENANCE_START.equals(action)) {
-                try {
-                    // This method runs on the handler thread,
-                    // so it is safe to directly call into vold.
-                    mConnector.execute("fstrim", "dotrim");
-                    EventLogTags.writeFstrimStart(SystemClock.elapsedRealtime());
-                } catch (NativeDaemonConnectorException ndce) {
-                    Slog.e(TAG, "Failed to run fstrim!");
-                }
-            }
-        }
-    };
-
     private final class MountServiceBinderListener implements IBinder.DeathRecipient {
         final IMountServiceListener mListener;
 
@@ -648,19 +564,18 @@ class MountService extends IMountService.Stub
         }
 
         try {
-            mConnector.execute("volume", enable ? "share" : "unshare", path, method);
+            mConnector.doCommand(String.format(
+                    "volume %sshare %s %s", (enable ? "" : "un"), path, method));
         } catch (NativeDaemonConnectorException e) {
             Slog.e(TAG, "Failed to share/unshare", e);
         }
     }
 
-    private void updatePublicVolumeState(StorageVolume volume, String state) {
-        final String path = volume.getPath();
-        final String oldState;
-        synchronized (mVolumesLock) {
+    private void updatePublicVolumeState(String path, String state) {
+        String oldState;
+        synchronized(mVolumeStates) {
             oldState = mVolumeStates.put(path, state);
         }
-
         if (state.equals(oldState)) {
             Slog.w(TAG, String.format("Duplicate state transition (%s -> %s) for %s",
                     state, state, path));
@@ -669,24 +584,24 @@ class MountService extends IMountService.Stub
 
         Slog.d(TAG, "volume state changed for " + path + " (" + oldState + " -> " + state + ")");
 
-        // Tell PackageManager about changes to primary volume state, but only
-        // when not emulated.
-        if (volume.isPrimary() && !volume.isEmulated()) {
-            if (Environment.MEDIA_UNMOUNTED.equals(state)) {
-                mPms.updateExternalMediaStatus(false, false);
+        if (path.equals(mExternalStoragePath)) {
+            // Update state on PackageManager, but only of real events
+            if (!mEmulateExternalStorage) {
+                if (Environment.MEDIA_UNMOUNTED.equals(state)) {
+                    mPms.updateExternalMediaStatus(false, false);
 
-                /*
-                 * Some OBBs might have been unmounted when this volume was
-                 * unmounted, so send a message to the handler to let it know to
-                 * remove those from the list of mounted OBBS.
-                 */
-                mObbActionHandler.sendMessage(mObbActionHandler.obtainMessage(
-                        OBB_FLUSH_MOUNT_STATE, path));
-            } else if (Environment.MEDIA_MOUNTED.equals(state)) {
-                mPms.updateExternalMediaStatus(true, false);
+                    /*
+                     * Some OBBs might have been unmounted when this volume was
+                     * unmounted, so send a message to the handler to let it know to
+                     * remove those from the list of mounted OBBS.
+                     */
+                    mObbActionHandler.sendMessage(mObbActionHandler.obtainMessage(
+                            OBB_FLUSH_MOUNT_STATE, path));
+                } else if (Environment.MEDIA_MOUNTED.equals(state)) {
+                    mPms.updateExternalMediaStatus(true, false);
+                }
             }
         }
-
         synchronized (mListeners) {
             for (int i = mListeners.size() -1; i >= 0; i--) {
                 MountServiceBinderListener bl = mListeners.get(i);
@@ -703,6 +618,7 @@ class MountService extends IMountService.Stub
     }
 
     /**
+     *
      * Callback from NativeDaemonConnector
      */
     public void onDaemonConnected() {
@@ -710,26 +626,20 @@ class MountService extends IMountService.Stub
          * Since we'll be calling back into the NativeDaemonConnector,
          * we need to do our work in a new thread.
          */
-        new Thread("MountService#onDaemonConnected") {
+        new Thread() {
             @Override
             public void run() {
                 /**
                  * Determine media state and UMS detection status
                  */
                 try {
-                    final String[] vols = NativeDaemonEvent.filterMessageList(
-                            mConnector.executeForList("volume", "list"),
-                            VoldResponseCode.VolumeListResult);
+                    String[] vols = mConnector.doListCommand(
+                        "volume list", VoldResponseCode.VolumeListResult);
                     for (String volstr : vols) {
                         String[] tok = volstr.split(" ");
                         // FMT: <label> <mountpoint> <state>
                         String path = tok[1];
                         String state = Environment.MEDIA_REMOVED;
-
-                        final StorageVolume volume;
-                        synchronized (mVolumesLock) {
-                            volume = mVolumesByPath.get(path);
-                        }
 
                         int st = Integer.parseInt(tok[2]);
                         if (st == VolumeState.NoMedia) {
@@ -748,28 +658,19 @@ class MountService extends IMountService.Stub
 
                         if (state != null) {
                             if (DEBUG_EVENTS) Slog.i(TAG, "Updating valid state " + state);
-                            updatePublicVolumeState(volume, state);
+                            updatePublicVolumeState(path, state);
                         }
                     }
                 } catch (Exception e) {
                     Slog.e(TAG, "Error processing initial volume state", e);
-                    final StorageVolume primary = getPrimaryPhysicalVolume();
-                    if (primary != null) {
-                        updatePublicVolumeState(primary, Environment.MEDIA_REMOVED);
-                    }
+                    updatePublicVolumeState(mExternalStoragePath, Environment.MEDIA_REMOVED);
                 }
 
                 /*
                  * Now that we've done our initialization, release
                  * the hounds!
                  */
-                mConnectedSignal.countDown();
-
-                // Let package manager load internal ASECs.
-                mPms.scanAvailableAsecs();
-
-                // Notify people waiting for ASECs to be scanned that it's done.
-                mAsecsScanned.countDown();
+                mReady = true;
             }
         }.start();
     }
@@ -820,13 +721,6 @@ class MountService extends IMountService.Stub
                 Slog.e(TAG, "Failed to parse major/minor", ex);
             }
 
-            final StorageVolume volume;
-            final String state;
-            synchronized (mVolumesLock) {
-                volume = mVolumesByPath.get(path);
-                state = mVolumeStates.get(path);
-            }
-
             if (code == VoldResponseCode.VolumeDiskInserted) {
                 new Thread() {
                     @Override
@@ -850,29 +744,27 @@ class MountService extends IMountService.Stub
                 }
                 /* Send the media unmounted event first */
                 if (DEBUG_EVENTS) Slog.i(TAG, "Sending unmounted event first");
-                updatePublicVolumeState(volume, Environment.MEDIA_UNMOUNTED);
-                sendStorageIntent(Environment.MEDIA_UNMOUNTED, volume, UserHandle.ALL);
+                updatePublicVolumeState(path, Environment.MEDIA_UNMOUNTED);
+                sendStorageIntent(Environment.MEDIA_UNMOUNTED, path);
 
                 if (DEBUG_EVENTS) Slog.i(TAG, "Sending media removed");
-                updatePublicVolumeState(volume, Environment.MEDIA_REMOVED);
+                updatePublicVolumeState(path, Environment.MEDIA_REMOVED);
                 action = Intent.ACTION_MEDIA_REMOVED;
             } else if (code == VoldResponseCode.VolumeBadRemoval) {
                 if (DEBUG_EVENTS) Slog.i(TAG, "Sending unmounted event first");
                 /* Send the media unmounted event first */
-                updatePublicVolumeState(volume, Environment.MEDIA_UNMOUNTED);
-                sendStorageIntent(Intent.ACTION_MEDIA_UNMOUNTED, volume, UserHandle.ALL);
+                updatePublicVolumeState(path, Environment.MEDIA_UNMOUNTED);
+                action = Intent.ACTION_MEDIA_UNMOUNTED;
 
                 if (DEBUG_EVENTS) Slog.i(TAG, "Sending media bad removal");
-                updatePublicVolumeState(volume, Environment.MEDIA_BAD_REMOVAL);
+                updatePublicVolumeState(path, Environment.MEDIA_BAD_REMOVAL);
                 action = Intent.ACTION_MEDIA_BAD_REMOVAL;
-            } else if (code == VoldResponseCode.FstrimCompleted) {
-                EventLogTags.writeFstrimFinish(SystemClock.elapsedRealtime());
             } else {
                 Slog.e(TAG, String.format("Unknown code {%d}", code));
             }
 
             if (action != null) {
-                sendStorageIntent(action, volume, UserHandle.ALL);
+                sendStorageIntent(action, path);
             }
         } else {
             return false;
@@ -882,20 +774,14 @@ class MountService extends IMountService.Stub
     }
 
     private void notifyVolumeStateChange(String label, String path, int oldState, int newState) {
-        final StorageVolume volume;
-        final String state;
-        synchronized (mVolumesLock) {
-            volume = mVolumesByPath.get(path);
-            state = getVolumeState(path);
-        }
-
-        if (DEBUG_EVENTS) Slog.i(TAG, "notifyVolumeStateChange::" + state);
+        String vs = getVolumeState(path);
+        if (DEBUG_EVENTS) Slog.i(TAG, "notifyVolumeStateChanged::" + vs);
 
         String action = null;
 
         if (oldState == VolumeState.Shared && newState != oldState) {
             if (LOCAL_LOGD) Slog.d(TAG, "Sending ACTION_MEDIA_UNSHARED intent");
-            sendStorageIntent(Intent.ACTION_MEDIA_UNSHARED, volume, UserHandle.ALL);
+            sendStorageIntent(Intent.ACTION_MEDIA_UNSHARED,  path);
         }
 
         if (newState == VolumeState.Init) {
@@ -906,22 +792,22 @@ class MountService extends IMountService.Stub
              * Don't notify if we're in BAD_REMOVAL, NOFS, UNMOUNTABLE, or
              * if we're in the process of enabling UMS
              */
-            if (!state.equals(
-                    Environment.MEDIA_BAD_REMOVAL) && !state.equals(
-                            Environment.MEDIA_NOFS) && !state.equals(
+            if (!vs.equals(
+                    Environment.MEDIA_BAD_REMOVAL) && !vs.equals(
+                            Environment.MEDIA_NOFS) && !vs.equals(
                                     Environment.MEDIA_UNMOUNTABLE) && !getUmsEnabling()) {
                 if (DEBUG_EVENTS) Slog.i(TAG, "updating volume state for media bad removal nofs and unmountable");
-                updatePublicVolumeState(volume, Environment.MEDIA_UNMOUNTED);
+                updatePublicVolumeState(path, Environment.MEDIA_UNMOUNTED);
                 action = Intent.ACTION_MEDIA_UNMOUNTED;
             }
         } else if (newState == VolumeState.Pending) {
         } else if (newState == VolumeState.Checking) {
             if (DEBUG_EVENTS) Slog.i(TAG, "updating volume state checking");
-            updatePublicVolumeState(volume, Environment.MEDIA_CHECKING);
+            updatePublicVolumeState(path, Environment.MEDIA_CHECKING);
             action = Intent.ACTION_MEDIA_CHECKING;
         } else if (newState == VolumeState.Mounted) {
             if (DEBUG_EVENTS) Slog.i(TAG, "updating volume state mounted");
-            updatePublicVolumeState(volume, Environment.MEDIA_MOUNTED);
+            updatePublicVolumeState(path, Environment.MEDIA_MOUNTED);
             action = Intent.ACTION_MEDIA_MOUNTED;
         } else if (newState == VolumeState.Unmounting) {
             action = Intent.ACTION_MEDIA_EJECT;
@@ -929,11 +815,11 @@ class MountService extends IMountService.Stub
         } else if (newState == VolumeState.Shared) {
             if (DEBUG_EVENTS) Slog.i(TAG, "Updating volume state media mounted");
             /* Send the media unmounted event first */
-            updatePublicVolumeState(volume, Environment.MEDIA_UNMOUNTED);
-            sendStorageIntent(Intent.ACTION_MEDIA_UNMOUNTED, volume, UserHandle.ALL);
+            updatePublicVolumeState(path, Environment.MEDIA_UNMOUNTED);
+            sendStorageIntent(Intent.ACTION_MEDIA_UNMOUNTED, path);
 
             if (DEBUG_EVENTS) Slog.i(TAG, "Updating media shared");
-            updatePublicVolumeState(volume, Environment.MEDIA_SHARED);
+            updatePublicVolumeState(path, Environment.MEDIA_SHARED);
             action = Intent.ACTION_MEDIA_SHARED;
             if (LOCAL_LOGD) Slog.d(TAG, "Sending ACTION_MEDIA_SHARED intent");
         } else if (newState == VolumeState.SharedMnt) {
@@ -944,21 +830,16 @@ class MountService extends IMountService.Stub
         }
 
         if (action != null) {
-            sendStorageIntent(action, volume, UserHandle.ALL);
+            sendStorageIntent(action, path);
         }
     }
 
     private int doMountVolume(String path) {
         int rc = StorageResultCode.OperationSucceeded;
 
-        final StorageVolume volume;
-        synchronized (mVolumesLock) {
-            volume = mVolumesByPath.get(path);
-        }
-
         if (DEBUG_EVENTS) Slog.i(TAG, "doMountVolume: Mouting " + path);
         try {
-            mConnector.execute("volume", "mount", path);
+            mConnector.doCommand(String.format("volume mount %s", path));
         } catch (NativeDaemonConnectorException e) {
             /*
              * Mount failed for some reason
@@ -975,7 +856,7 @@ class MountService extends IMountService.Stub
                 /*
                  * Media is blank or does not contain a supported filesystem
                  */
-                updatePublicVolumeState(volume, Environment.MEDIA_NOFS);
+                updatePublicVolumeState(path, Environment.MEDIA_NOFS);
                 action = Intent.ACTION_MEDIA_NOFS;
                 rc = StorageResultCode.OperationFailedMediaBlank;
             } else if (code == VoldResponseCode.OpFailedMediaCorrupt) {
@@ -983,7 +864,7 @@ class MountService extends IMountService.Stub
                 /*
                  * Volume consistency check failed
                  */
-                updatePublicVolumeState(volume, Environment.MEDIA_UNMOUNTABLE);
+                updatePublicVolumeState(path, Environment.MEDIA_UNMOUNTABLE);
                 action = Intent.ACTION_MEDIA_UNMOUNTABLE;
                 rc = StorageResultCode.OperationFailedMediaCorrupt;
             } else {
@@ -994,7 +875,7 @@ class MountService extends IMountService.Stub
              * Send broadcast intent (if required for the failure)
              */
             if (action != null) {
-                sendStorageIntent(action, volume, UserHandle.ALL);
+                sendStorageIntent(action, path);
             }
         }
 
@@ -1028,13 +909,10 @@ class MountService extends IMountService.Stub
         // Redundant probably. But no harm in updating state again.
         mPms.updateExternalMediaStatus(false, false);
         try {
-            final Command cmd = new Command("volume", "unmount", path);
-            if (removeEncryption) {
-                cmd.appendArg("force_and_revert");
-            } else if (force) {
-                cmd.appendArg("force");
-            }
-            mConnector.execute(cmd);
+            String arg = removeEncryption
+                    ? " force_and_revert"
+                    : (force ? " force" : "");
+            mConnector.doCommand(String.format("volume unmount %s%s", path, arg));
             // We unmounted the volume. None of the asec containers are available now.
             synchronized (mAsecMountSet) {
                 mAsecMountSet.clear();
@@ -1056,7 +934,8 @@ class MountService extends IMountService.Stub
 
     private int doFormatVolume(String path) {
         try {
-            mConnector.execute("volume", "format", path);
+            String cmd = String.format("volume format %s", path);
+            mConnector.doCommand(cmd);
             return StorageResultCode.OperationSucceeded;
         } catch (NativeDaemonConnectorException e) {
             int code = e.getCode();
@@ -1071,19 +950,39 @@ class MountService extends IMountService.Stub
     }
 
     private boolean doGetVolumeShared(String path, String method) {
-        final NativeDaemonEvent event;
+        String cmd = String.format("volume shared %s %s", path, method);
+        ArrayList<String> rsp;
+
         try {
-            event = mConnector.execute("volume", "shared", path, method);
+            rsp = mConnector.doCommand(cmd);
         } catch (NativeDaemonConnectorException ex) {
             Slog.e(TAG, "Failed to read response to volume shared " + path + " " + method);
             return false;
         }
 
-        if (event.getCode() == VoldResponseCode.ShareEnabledResult) {
-            return event.getMessage().endsWith("enabled");
-        } else {
-            return false;
+        for (String line : rsp) {
+            String[] tok = line.split(" ");
+            if (tok.length < 3) {
+                Slog.e(TAG, "Malformed response to volume shared " + path + " " + method + " command");
+                return false;
+            }
+
+            int code;
+            try {
+                code = Integer.parseInt(tok[0]);
+            } catch (NumberFormatException nfe) {
+                Slog.e(TAG, String.format("Error parsing code %s", tok[0]));
+                return false;
+            }
+            if (code == VoldResponseCode.ShareEnabledResult) {
+                return "enabled".equals(tok[2]);
+            } else {
+                Slog.e(TAG, String.format("Unexpected response code %d", code));
+                return false;
+            }
         }
+        Slog.e(TAG, "Got an empty response");
+        return false;
     }
 
     private void notifyShareAvailabilityChange(final boolean avail) {
@@ -1102,16 +1001,14 @@ class MountService extends IMountService.Stub
             }
         }
 
-        if (mSystemReady == true) {
+        if (mBooted == true) {
             sendUmsIntent(avail);
         } else {
             mSendUmsConnectedOnBoot = avail;
         }
 
-        final StorageVolume primary = getPrimaryPhysicalVolume();
-        if (avail == false && primary != null
-                && Environment.MEDIA_SHARED.equals(getVolumeState(primary.getPath()))) {
-            final String path = primary.getPath();
+        final String path = Environment.getExternalStorageDirectory().getPath();
+        if (avail == false && getVolumeState(path).equals(Environment.MEDIA_SHARED)) {
             /*
              * USB mass storage disconnected while enabled
              */
@@ -1135,17 +1032,17 @@ class MountService extends IMountService.Stub
         }
     }
 
-    private void sendStorageIntent(String action, StorageVolume volume, UserHandle user) {
-        final Intent intent = new Intent(action, Uri.parse("file://" + volume.getPath()));
-        intent.putExtra(StorageVolume.EXTRA_STORAGE_VOLUME, volume);
-        Slog.d(TAG, "sendStorageIntent " + intent + " to " + user);
-        mContext.sendBroadcastAsUser(intent, user);
+    private void sendStorageIntent(String action, String path) {
+        Intent intent = new Intent(action, Uri.parse("file://" + path));
+        // add StorageVolume extra
+        intent.putExtra(StorageVolume.EXTRA_STORAGE_VOLUME, mVolumeMap.get(path));
+        Slog.d(TAG, "sendStorageIntent " + intent);
+        mContext.sendBroadcast(intent);
     }
 
     private void sendUmsIntent(boolean c) {
-        mContext.sendBroadcastAsUser(
-                new Intent((c ? Intent.ACTION_UMS_CONNECTED : Intent.ACTION_UMS_DISCONNECTED)),
-                UserHandle.ALL);
+        mContext.sendBroadcast(
+                new Intent((c ? Intent.ACTION_UMS_CONNECTED : Intent.ACTION_UMS_DISCONNECTED)));
     }
 
     private void validatePermission(String perm) {
@@ -1158,12 +1055,7 @@ class MountService extends IMountService.Stub
     private static final String TAG_STORAGE_LIST = "StorageList";
     private static final String TAG_STORAGE = "storage";
 
-    private void readStorageListLocked() {
-        mVolumes.clear();
-        mVolumeStates.clear();
-
-        Resources resources = mContext.getResources();
-
+    private void readStorageList(Resources resources) {
         int id = com.android.internal.R.xml.storage_list;
         XmlResourceParser parser = resources.getXml(id);
         AttributeSet attrs = Xml.asAttributeSet(parser);
@@ -1180,10 +1072,8 @@ class MountService extends IMountService.Stub
                     TypedArray a = resources.obtainAttributes(attrs,
                             com.android.internal.R.styleable.Storage);
 
-                    String path = a.getString(
+                    CharSequence path = a.getText(
                             com.android.internal.R.styleable.Storage_mountPoint);
-                    int descriptionId = a.getResourceId(
-                            com.android.internal.R.styleable.Storage_storageDescription, -1);
                     CharSequence description = a.getText(
                             com.android.internal.R.styleable.Storage_storageDescription);
                     boolean primary = a.getBoolean(
@@ -1205,29 +1095,28 @@ class MountService extends IMountService.Stub
                             " emulated: " + emulated +  " mtpReserve: " + mtpReserve +
                             " allowMassStorage: " + allowMassStorage +
                             " maxFileSize: " + maxFileSize);
-
-                    if (emulated) {
-                        // For devices with emulated storage, we create separate
-                        // volumes for each known user.
-                        mEmulatedTemplate = new StorageVolume(null, descriptionId, true, false,
-                                true, mtpReserve, false, maxFileSize, null);
-
-                        final UserManagerService userManager = UserManagerService.getInstance();
-                        for (UserInfo user : userManager.getUsers(false)) {
-                            createEmulatedVolumeForUserLocked(user.getUserHandle());
-                        }
-
+                    if (path == null || description == null) {
+                        Slog.e(TAG, "path or description is null in readStorageList");
                     } else {
-                        if (path == null || description == null) {
-                            Slog.e(TAG, "Missing storage path or description in readStorageList");
-                        } else {
-                            final StorageVolume volume = new StorageVolume(new File(path),
-                                    descriptionId, primary, removable, emulated, mtpReserve,
-                                    allowMassStorage, maxFileSize, null);
-                            addVolumeLocked(volume);
+                        String pathString = path.toString();
+                        StorageVolume volume = new StorageVolume(pathString,
+                                description.toString(), removable, emulated,
+                                mtpReserve, allowMassStorage, maxFileSize);
+                        if (primary) {
+                            if (mPrimaryVolume == null) {
+                                mPrimaryVolume = volume;
+                            } else {
+                                Slog.e(TAG, "multiple primary volumes in storage list");
+                            }
                         }
+                        if (mPrimaryVolume == volume) {
+                            // primay volume must be first
+                            mVolumes.add(0, volume);
+                        } else {
+                            mVolumes.add(volume);
+                        }
+                        mVolumeMap.put(pathString, volume);
                     }
-
                     a.recycle();
                 }
             }
@@ -1236,67 +1125,13 @@ class MountService extends IMountService.Stub
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
-            // Compute storage ID for each physical volume; emulated storage is
-            // always 0 when defined.
-            int index = isExternalStorageEmulated() ? 1 : 0;
-            for (StorageVolume volume : mVolumes) {
-                if (!volume.isEmulated()) {
-                    volume.setStorageId(index++);
-                }
+            // compute storage ID for each volume
+            int length = mVolumes.size();
+            for (int i = 0; i < length; i++) {
+                mVolumes.get(i).setStorageId(i);
             }
             parser.close();
         }
-    }
-
-    /**
-     * Create and add new {@link StorageVolume} for given {@link UserHandle}
-     * using {@link #mEmulatedTemplate} as template.
-     */
-    private void createEmulatedVolumeForUserLocked(UserHandle user) {
-        if (mEmulatedTemplate == null) {
-            throw new IllegalStateException("Missing emulated volume multi-user template");
-        }
-
-        final UserEnvironment userEnv = new UserEnvironment(user.getIdentifier());
-        final File path = userEnv.getExternalStorageDirectory();
-        final StorageVolume volume = StorageVolume.fromTemplate(mEmulatedTemplate, path, user);
-        volume.setStorageId(0);
-        addVolumeLocked(volume);
-
-        if (mSystemReady) {
-            updatePublicVolumeState(volume, Environment.MEDIA_MOUNTED);
-        } else {
-            // Place stub status for early callers to find
-            mVolumeStates.put(volume.getPath(), Environment.MEDIA_MOUNTED);
-        }
-    }
-
-    private void addVolumeLocked(StorageVolume volume) {
-        Slog.d(TAG, "addVolumeLocked() " + volume);
-        mVolumes.add(volume);
-        final StorageVolume existing = mVolumesByPath.put(volume.getPath(), volume);
-        if (existing != null) {
-            throw new IllegalStateException(
-                    "Volume at " + volume.getPath() + " already exists: " + existing);
-        }
-    }
-
-    private void removeVolumeLocked(StorageVolume volume) {
-        Slog.d(TAG, "removeVolumeLocked() " + volume);
-        mVolumes.remove(volume);
-        mVolumesByPath.remove(volume.getPath());
-        mVolumeStates.remove(volume.getPath());
-    }
-
-    private StorageVolume getPrimaryPhysicalVolume() {
-        synchronized (mVolumesLock) {
-            for (StorageVolume volume : mVolumes) {
-                if (volume.isPrimary() && !volume.isEmulated()) {
-                    return volume;
-                }
-            }
-        }
-        return null;
     }
 
     /**
@@ -1306,47 +1141,53 @@ class MountService extends IMountService.Stub
      */
     public MountService(Context context) {
         mContext = context;
+        Resources resources = context.getResources();
+        readStorageList(resources);
 
-        synchronized (mVolumesLock) {
-            readStorageListLocked();
+        if (mPrimaryVolume != null) {
+            mExternalStoragePath = mPrimaryVolume.getPath();
+            mEmulateExternalStorage = mPrimaryVolume.isEmulated();
+            if (mEmulateExternalStorage) {
+                Slog.d(TAG, "using emulated external storage");
+                mVolumeStates.put(mExternalStoragePath, Environment.MEDIA_MOUNTED);
+            }
         }
 
         // XXX: This will go away soon in favor of IMountServiceObserver
         mPms = (PackageManagerService) ServiceManager.getService("package");
 
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_BOOT_COMPLETED);
+        // don't bother monitoring USB if mass storage is not supported on our primary volume
+        if (mPrimaryVolume != null && mPrimaryVolume.allowMassStorage()) {
+            filter.addAction(UsbManager.ACTION_USB_STATE);
+        }
+        mContext.registerReceiver(mBroadcastReceiver, filter, null, null);
+
         mHandlerThread = new HandlerThread("MountService");
         mHandlerThread.start();
         mHandler = new MountServiceHandler(mHandlerThread.getLooper());
 
-        // Watch for user changes
-        final IntentFilter userFilter = new IntentFilter();
-        userFilter.addAction(Intent.ACTION_USER_ADDED);
-        userFilter.addAction(Intent.ACTION_USER_REMOVED);
-        mContext.registerReceiver(mUserReceiver, userFilter, null, mHandler);
-
-        // Watch for USB changes on primary volume
-        final StorageVolume primary = getPrimaryPhysicalVolume();
-        if (primary != null && primary.allowMassStorage()) {
-            mContext.registerReceiver(
-                    mUsbReceiver, new IntentFilter(UsbManager.ACTION_USB_STATE), null, mHandler);
-        }
-
-        // Watch for idle maintenance changes
-        IntentFilter idleMaintenanceFilter = new IntentFilter();
-        idleMaintenanceFilter.addAction(Intent.ACTION_IDLE_MAINTENANCE_START);
-        mContext.registerReceiverAsUser(mIdleMaintenanceReceiver, UserHandle.ALL,
-                idleMaintenanceFilter, null, mHandler);
-
         // Add OBB Action Handler to MountService thread.
         mObbActionHandler = new ObbActionHandler(mHandlerThread.getLooper());
+
+        /*
+         * Vold does not run in the simulator, so pretend the connector thread
+         * ran and did its thing.
+         */
+        if ("simulator".equals(SystemProperties.get("ro.product.device"))) {
+            mReady = true;
+            mUmsEnabling = true;
+            return;
+        }
 
         /*
          * Create the connection to vold with a maximum queue of twice the
          * amount of containers we'd ever expect to have. This keeps an
          * "asec list" from blocking a thread repeatedly.
          */
-        mConnector = new NativeDaemonConnector(this, "vold", MAX_CONTAINERS * 2, VOLD_TAG, 25);
-
+        mConnector = new NativeDaemonConnector(this, "vold", MAX_CONTAINERS * 2, VOLD_TAG);
+        mReady = false;
         Thread thread = new Thread(mConnector, VOLD_TAG);
         thread.start();
 
@@ -1354,11 +1195,6 @@ class MountService extends IMountService.Stub
         if (WATCHDOG_ENABLE) {
             Watchdog.getInstance().addMonitor(this);
         }
-    }
-
-    public void systemReady() {
-        mSystemReady = true;
-        mHandler.obtainMessage(H_SYSTEM_READY).sendToTarget();
     }
 
     /**
@@ -1382,7 +1218,6 @@ class MountService extends IMountService.Stub
             for(MountServiceBinderListener bl : mListeners) {
                 if (bl.mListener == listener) {
                     mListeners.remove(mListeners.indexOf(bl));
-                    listener.asBinder().unlinkToDeath(bl, 0);
                     return;
                 }
             }
@@ -1393,7 +1228,7 @@ class MountService extends IMountService.Stub
         validatePermission(android.Manifest.permission.SHUTDOWN);
 
         Slog.i(TAG, "Shutting down");
-        synchronized (mVolumesLock) {
+        synchronized (mVolumeStates) {
             for (String path : mVolumeStates.keySet()) {
                 String state = mVolumeStates.get(path);
 
@@ -1474,15 +1309,12 @@ class MountService extends IMountService.Stub
         waitForReady();
         validatePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
-        final StorageVolume primary = getPrimaryPhysicalVolume();
-        if (primary == null) return;
-
         // TODO: Add support for multiple share methods
 
         /*
          * If the volume is mounted and we're enabling then unmount it
          */
-        String path = primary.getPath();
+        String path = Environment.getExternalStorageDirectory().getPath();
         String vs = getVolumeState(path);
         String method = "ums";
         if (enable && vs.equals(Environment.MEDIA_MOUNTED)) {
@@ -1512,20 +1344,14 @@ class MountService extends IMountService.Stub
 
     public boolean isUsbMassStorageEnabled() {
         waitForReady();
-
-        final StorageVolume primary = getPrimaryPhysicalVolume();
-        if (primary != null) {
-            return doGetVolumeShared(primary.getPath(), "ums");
-        } else {
-            return false;
-        }
+        return doGetVolumeShared(Environment.getExternalStorageDirectory().getPath(), "ums");
     }
 
     /**
      * @return state of the volume at the specified mount point
      */
     public String getVolumeState(String mountPoint) {
-        synchronized (mVolumesLock) {
+        synchronized (mVolumeStates) {
             String state = mVolumeStates.get(mountPoint);
             if (state == null) {
                 Slog.w(TAG, "getVolumeState(" + mountPoint + "): Unknown volume");
@@ -1540,9 +1366,8 @@ class MountService extends IMountService.Stub
         }
     }
 
-    @Override
     public boolean isExternalStorageEmulated() {
-        return mEmulatedTemplate != null;
+        return mEmulateExternalStorage;
     }
 
     public int mountVolume(String path) {
@@ -1585,14 +1410,13 @@ class MountService extends IMountService.Stub
         validatePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
         waitForReady();
         try {
-            final String[] r = NativeDaemonEvent.filterMessageList(
-                    mConnector.executeForList("storage", "users", path),
-                    VoldResponseCode.StorageUsersListResult);
-
+            String[] r = mConnector.doListCommand(
+                    String.format("storage users %s", path),
+                            VoldResponseCode.StorageUsersListResult);
             // FMT: <pid> <process name>
             int[] data = new int[r.length];
             for (int i = 0; i < r.length; i++) {
-                String[] tok = r[i].split(" ");
+                String []tok = r[i].split(" ");
                 try {
                     data[i] = Integer.parseInt(tok[0]);
                 } catch (NumberFormatException nfe) {
@@ -1608,17 +1432,8 @@ class MountService extends IMountService.Stub
     }
 
     private void warnOnNotMounted() {
-        final StorageVolume primary = getPrimaryPhysicalVolume();
-        if (primary != null) {
-            boolean mounted = false;
-            try {
-                mounted = Environment.MEDIA_MOUNTED.equals(getVolumeState(primary.getPath()));
-            } catch (IllegalArgumentException e) {
-            }
-
-            if (!mounted) {
-                Slog.w(TAG, "getSecureContainerList() called when storage not mounted");
-            }
+        if (!Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
+            Slog.w(TAG, "getSecureContainerList() called when storage not mounted");
         }
     }
 
@@ -1628,23 +1443,22 @@ class MountService extends IMountService.Stub
         warnOnNotMounted();
 
         try {
-            return NativeDaemonEvent.filterMessageList(
-                    mConnector.executeForList("asec", "list"), VoldResponseCode.AsecListResult);
+            return mConnector.doListCommand("asec list", VoldResponseCode.AsecListResult);
         } catch (NativeDaemonConnectorException e) {
             return new String[0];
         }
     }
 
-    public int createSecureContainer(String id, int sizeMb, String fstype, String key,
-            int ownerUid, boolean external) {
+    public int createSecureContainer(String id, int sizeMb, String fstype,
+                                    String key, int ownerUid) {
         validatePermission(android.Manifest.permission.ASEC_CREATE);
         waitForReady();
         warnOnNotMounted();
 
         int rc = StorageResultCode.OperationSucceeded;
+        String cmd = String.format("asec create %s %d %s %s %d", id, sizeMb, fstype, key, ownerUid);
         try {
-            mConnector.execute("asec", "create", id, sizeMb, fstype, new SensitiveArg(key),
-                    ownerUid, external ? "1" : "0");
+            mConnector.doCommand(cmd);
         } catch (NativeDaemonConnectorException e) {
             rc = StorageResultCode.OperationFailedInternalError;
         }
@@ -1663,27 +1477,10 @@ class MountService extends IMountService.Stub
 
         int rc = StorageResultCode.OperationSucceeded;
         try {
-            mConnector.execute("asec", "finalize", id);
+            mConnector.doCommand(String.format("asec finalize %s", id));
             /*
              * Finalization does a remount, so no need
              * to update mAsecMountSet
-             */
-        } catch (NativeDaemonConnectorException e) {
-            rc = StorageResultCode.OperationFailedInternalError;
-        }
-        return rc;
-    }
-
-    public int fixPermissionsSecureContainer(String id, int gid, String filename) {
-        validatePermission(android.Manifest.permission.ASEC_CREATE);
-        warnOnNotMounted();
-
-        int rc = StorageResultCode.OperationSucceeded;
-        try {
-            mConnector.execute("asec", "fixperms", id, gid, filename);
-            /*
-             * Fix permissions does a remount, so no need to update
-             * mAsecMountSet
              */
         } catch (NativeDaemonConnectorException e) {
             rc = StorageResultCode.OperationFailedInternalError;
@@ -1706,11 +1503,7 @@ class MountService extends IMountService.Stub
 
         int rc = StorageResultCode.OperationSucceeded;
         try {
-            final Command cmd = new Command("asec", "destroy", id);
-            if (force) {
-                cmd.appendArg("force");
-            }
-            mConnector.execute(cmd);
+            mConnector.doCommand(String.format("asec destroy %s%s", id, (force ? " force" : "")));
         } catch (NativeDaemonConnectorException e) {
             int code = e.getCode();
             if (code == VoldResponseCode.OpFailedStorageBusy) {
@@ -1743,8 +1536,9 @@ class MountService extends IMountService.Stub
         }
 
         int rc = StorageResultCode.OperationSucceeded;
+        String cmd = String.format("asec mount %s %s %d", id, key, ownerUid);
         try {
-            mConnector.execute("asec", "mount", id, new SensitiveArg(key), ownerUid);
+            mConnector.doCommand(cmd);
         } catch (NativeDaemonConnectorException e) {
             int code = e.getCode();
             if (code != VoldResponseCode.OpFailedStorageBusy) {
@@ -1780,12 +1574,9 @@ class MountService extends IMountService.Stub
         Runtime.getRuntime().gc();
 
         int rc = StorageResultCode.OperationSucceeded;
+        String cmd = String.format("asec unmount %s%s", id, (force ? " force" : ""));
         try {
-            final Command cmd = new Command("asec", "unmount", id);
-            if (force) {
-                cmd.appendArg("force");
-            }
-            mConnector.execute(cmd);
+            mConnector.doCommand(cmd);
         } catch (NativeDaemonConnectorException e) {
             int code = e.getCode();
             if (code == VoldResponseCode.OpFailedStorageBusy) {
@@ -1829,8 +1620,9 @@ class MountService extends IMountService.Stub
         }
 
         int rc = StorageResultCode.OperationSucceeded;
+        String cmd = String.format("asec rename %s %s", oldId, newId);
         try {
-            mConnector.execute("asec", "rename", oldId, newId);
+            mConnector.doCommand(cmd);
         } catch (NativeDaemonConnectorException e) {
             rc = StorageResultCode.OperationFailedInternalError;
         }
@@ -1843,11 +1635,14 @@ class MountService extends IMountService.Stub
         waitForReady();
         warnOnNotMounted();
 
-        final NativeDaemonEvent event;
         try {
-            event = mConnector.execute("asec", "path", id);
-            event.checkCode(VoldResponseCode.AsecPathResult);
-            return event.getMessage();
+            ArrayList<String> rsp = mConnector.doCommand(String.format("asec path %s", id));
+            String []tok = rsp.get(0).split(" ");
+            int code = Integer.parseInt(tok[0]);
+            if (code != VoldResponseCode.AsecPathResult) {
+                throw new IllegalStateException(String.format("Unexpected response code %d", code));
+            }
+            return tok[1];
         } catch (NativeDaemonConnectorException e) {
             int code = e.getCode();
             if (code == VoldResponseCode.OpFailedStorageNotFound) {
@@ -1864,11 +1659,14 @@ class MountService extends IMountService.Stub
         waitForReady();
         warnOnNotMounted();
 
-        final NativeDaemonEvent event;
         try {
-            event = mConnector.execute("asec", "fspath", id);
-            event.checkCode(VoldResponseCode.AsecPathResult);
-            return event.getMessage();
+            ArrayList<String> rsp = mConnector.doCommand(String.format("asec fspath %s", id));
+            String []tok = rsp.get(0).split(" ");
+            int code = Integer.parseInt(tok[0]);
+            if (code != VoldResponseCode.AsecPathResult) {
+                throw new IllegalStateException(String.format("Unexpected response code %d", code));
+            }
+            return tok[1];
         } catch (NativeDaemonConnectorException e) {
             int code = e.getCode();
             if (code == VoldResponseCode.OpFailedStorageNotFound) {
@@ -1893,7 +1691,7 @@ class MountService extends IMountService.Stub
             return false;
         }
 
-        final int packageUid = mPms.getPackageUid(packageName, UserHandle.getUserId(callerUid));
+        final int packageUid = mPms.getPackageUid(packageName);
 
         if (DEBUG_OBB) {
             Slog.d(TAG, "packageName = " + packageName + ", packageUid = " +
@@ -1903,26 +1701,22 @@ class MountService extends IMountService.Stub
         return callerUid == packageUid;
     }
 
-    public String getMountedObbPath(String rawPath) {
-        Preconditions.checkNotNull(rawPath, "rawPath cannot be null");
+    public String getMountedObbPath(String filename) {
+        if (filename == null) {
+            throw new IllegalArgumentException("filename cannot be null");
+        }
 
         waitForReady();
         warnOnNotMounted();
 
-        final ObbState state;
-        synchronized (mObbPathToStateMap) {
-            state = mObbPathToStateMap.get(rawPath);
-        }
-        if (state == null) {
-            Slog.w(TAG, "Failed to find OBB mounted at " + rawPath);
-            return null;
-        }
-
-        final NativeDaemonEvent event;
         try {
-            event = mConnector.execute("obb", "path", state.voldPath);
-            event.checkCode(VoldResponseCode.AsecPathResult);
-            return event.getMessage();
+            ArrayList<String> rsp = mConnector.doCommand(String.format("obb path %s", filename));
+            String []tok = rsp.get(0).split(" ");
+            int code = Integer.parseInt(tok[0]);
+            if (code != VoldResponseCode.AsecPathResult) {
+                throw new IllegalStateException(String.format("Unexpected response code %d", code));
+            }
+            return tok[1];
         } catch (NativeDaemonConnectorException e) {
             int code = e.getCode();
             if (code == VoldResponseCode.OpFailedStorageNotFound) {
@@ -1933,52 +1727,48 @@ class MountService extends IMountService.Stub
         }
     }
 
-    @Override
-    public boolean isObbMounted(String rawPath) {
-        Preconditions.checkNotNull(rawPath, "rawPath cannot be null");
+    public boolean isObbMounted(String filename) {
+        if (filename == null) {
+            throw new IllegalArgumentException("filename cannot be null");
+        }
+
         synchronized (mObbMounts) {
-            return mObbPathToStateMap.containsKey(rawPath);
+            return mObbPathToStateMap.containsKey(filename);
         }
     }
 
-    @Override
-    public void mountObb(
-            String rawPath, String canonicalPath, String key, IObbActionListener token, int nonce) {
-        Preconditions.checkNotNull(rawPath, "rawPath cannot be null");
-        Preconditions.checkNotNull(canonicalPath, "canonicalPath cannot be null");
-        Preconditions.checkNotNull(token, "token cannot be null");
+    public void mountObb(String filename, String key, IObbActionListener token, int nonce)
+            throws RemoteException {
+        if (filename == null) {
+            throw new IllegalArgumentException("filename cannot be null");
+        }
 
-        final int callingUid = Binder.getCallingUid();
-        final ObbState obbState = new ObbState(rawPath, canonicalPath, callingUid, token, nonce);
-        final ObbAction action = new MountObbAction(obbState, key, callingUid);
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+
+        final int callerUid = Binder.getCallingUid();
+        final ObbState obbState = new ObbState(filename, callerUid, token, nonce);
+        final ObbAction action = new MountObbAction(obbState, key);
         mObbActionHandler.sendMessage(mObbActionHandler.obtainMessage(OBB_RUN_ACTION, action));
 
         if (DEBUG_OBB)
             Slog.i(TAG, "Send to OBB handler: " + action.toString());
     }
 
-    @Override
-    public void unmountObb(String rawPath, boolean force, IObbActionListener token, int nonce) {
-        Preconditions.checkNotNull(rawPath, "rawPath cannot be null");
-
-        final ObbState existingState;
-        synchronized (mObbPathToStateMap) {
-            existingState = mObbPathToStateMap.get(rawPath);
+    public void unmountObb(String filename, boolean force, IObbActionListener token, int nonce)
+            throws RemoteException {
+        if (filename == null) {
+            throw new IllegalArgumentException("filename cannot be null");
         }
 
-        if (existingState != null) {
-            // TODO: separate state object from request data
-            final int callingUid = Binder.getCallingUid();
-            final ObbState newState = new ObbState(
-                    rawPath, existingState.canonicalPath, callingUid, token, nonce);
-            final ObbAction action = new UnmountObbAction(newState, force);
-            mObbActionHandler.sendMessage(mObbActionHandler.obtainMessage(OBB_RUN_ACTION, action));
+        final int callerUid = Binder.getCallingUid();
+        final ObbState obbState = new ObbState(filename, callerUid, token, nonce);
+        final ObbAction action = new UnmountObbAction(obbState, force);
+        mObbActionHandler.sendMessage(mObbActionHandler.obtainMessage(OBB_RUN_ACTION, action));
 
-            if (DEBUG_OBB)
-                Slog.i(TAG, "Send to OBB handler: " + action.toString());
-        } else {
-            Slog.w(TAG, "Unknown OBB mount at " + rawPath);
-        }
+        if (DEBUG_OBB)
+            Slog.i(TAG, "Send to OBB handler: " + action.toString());
     }
 
     @Override
@@ -1988,10 +1778,18 @@ class MountService extends IMountService.Stub
 
         waitForReady();
 
-        final NativeDaemonEvent event;
         try {
-            event = mConnector.execute("cryptfs", "cryptocomplete");
-            return Integer.parseInt(event.getMessage());
+            ArrayList<String> rsp = mConnector.doCommand("cryptfs cryptocomplete");
+            String[] tokens = rsp.get(0).split(" ");
+
+            if (tokens == null || tokens.length != 2) {
+                // Unexpected.
+                Slog.w(TAG, "Unexpected result from cryptfs cryptocomplete");
+                return ENCRYPTION_STATE_ERROR_UNKNOWN;
+            }
+
+            return Integer.parseInt(tokens[1]);
+
         } catch (NumberFormatException e) {
             // Bad result - unexpected.
             Slog.w(TAG, "Unable to parse result from cryptfs cryptocomplete");
@@ -2018,21 +1816,22 @@ class MountService extends IMountService.Stub
             Slog.i(TAG, "decrypting storage...");
         }
 
-        final NativeDaemonEvent event;
         try {
-            event = mConnector.execute("cryptfs", "checkpw", new SensitiveArg(password));
+            ArrayList<String> rsp = mConnector.doCommand("cryptfs checkpw " + password);
+            String[] tokens = rsp.get(0).split(" ");
 
-            final int code = Integer.parseInt(event.getMessage());
+            if (tokens == null || tokens.length != 2) {
+                return -1;
+            }
+
+            int code = Integer.parseInt(tokens[1]);
+
             if (code == 0) {
                 // Decrypt was successful. Post a delayed message before restarting in order
                 // to let the UI to clear itself
                 mHandler.postDelayed(new Runnable() {
                     public void run() {
-                        try {
-                            mConnector.execute("cryptfs", "restart");
-                        } catch (NativeDaemonConnectorException e) {
-                            Slog.e(TAG, "problem executing in background", e);
-                        }
+                        mConnector.doCommand(String.format("cryptfs restart"));
                     }
                 }, 1000); // 1 second
             }
@@ -2059,7 +1858,7 @@ class MountService extends IMountService.Stub
         }
 
         try {
-            mConnector.execute("cryptfs", "enablecrypto", "inplace", new SensitiveArg(password));
+            mConnector.doCommand(String.format("cryptfs enablecrypto inplace %s", password));
         } catch (NativeDaemonConnectorException e) {
             // Encryption failed
             return e.getCode();
@@ -2082,10 +1881,16 @@ class MountService extends IMountService.Stub
             Slog.i(TAG, "changing encryption password...");
         }
 
-        final NativeDaemonEvent event;
         try {
-            event = mConnector.execute("cryptfs", "changepw", new SensitiveArg(password));
-            return Integer.parseInt(event.getMessage());
+            ArrayList<String> response = mConnector.doCommand("cryptfs changepw " + password);
+
+            String[] tokens = response.get(0).split(" ");
+
+            if (tokens == null || tokens.length != 2) {
+                return -1;
+            }
+
+            return Integer.parseInt(tokens[1]);
         } catch (NativeDaemonConnectorException e) {
             // Encryption failed
             return e.getCode();
@@ -2115,34 +1920,38 @@ class MountService extends IMountService.Stub
             Slog.i(TAG, "validating encryption password...");
         }
 
-        final NativeDaemonEvent event;
         try {
-            event = mConnector.execute("cryptfs", "verifypw", new SensitiveArg(password));
-            Slog.i(TAG, "cryptfs verifypw => " + event.getMessage());
-            return Integer.parseInt(event.getMessage());
+            ArrayList<String> response = mConnector.doCommand("cryptfs verifypw " + password);
+            String[] tokens = response.get(0).split(" ");
+
+            if (tokens == null || tokens.length != 2) {
+                String msg = "Unexpected result from cryptfs verifypw: {";
+                if (tokens == null) msg += "null";
+                else for (int i = 0; i < tokens.length; i++) {
+                    if (i != 0) msg += ',';
+                    msg += tokens[i];
+                }
+                msg += '}';
+                Slog.e(TAG, msg);
+                return -1;
+            }
+
+            Slog.i(TAG, "cryptfs verifypw => " + tokens[1]);
+            return Integer.parseInt(tokens[1]);
         } catch (NativeDaemonConnectorException e) {
             // Encryption failed
             return e.getCode();
         }
     }
 
-    @Override
-    public StorageVolume[] getVolumeList() {
-        final int callingUserId = UserHandle.getCallingUserId();
-        final boolean accessAll = (mContext.checkPermission(
-                android.Manifest.permission.ACCESS_ALL_EXTERNAL_STORAGE,
-                Binder.getCallingPid(), Binder.getCallingUid()) == PERMISSION_GRANTED);
-
-        synchronized (mVolumesLock) {
-            final ArrayList<StorageVolume> filtered = Lists.newArrayList();
-            for (StorageVolume volume : mVolumes) {
-                final UserHandle owner = volume.getOwner();
-                final boolean ownerMatch = owner == null || owner.getIdentifier() == callingUserId;
-                if (accessAll || ownerMatch) {
-                    filtered.add(volume);
-                }
+    public Parcelable[] getVolumeList() {
+        synchronized(mVolumes) {
+            int size = mVolumes.size();
+            Parcelable[] result = new Parcelable[size];
+            for (int i = 0; i < size; i++) {
+                result[i] = mVolumes.get(i);
             }
-            return filtered.toArray(new StorageVolume[filtered.size()]);
+            return result;
         }
     }
 
@@ -2155,7 +1964,7 @@ class MountService extends IMountService.Stub
             mObbMounts.put(binder, obbStates);
         } else {
             for (final ObbState o : obbStates) {
-                if (o.rawPath.equals(obbState.rawPath)) {
+                if (o.filename.equals(obbState.filename)) {
                     throw new IllegalStateException("Attempt to add ObbState twice. "
                             + "This indicates an error in the MountService logic.");
                 }
@@ -2179,7 +1988,7 @@ class MountService extends IMountService.Stub
             throw e;
         }
 
-        mObbPathToStateMap.put(obbState.rawPath, obbState);
+        mObbPathToStateMap.put(obbState.filename, obbState);
     }
 
     private void removeObbStateLocked(ObbState obbState) {
@@ -2194,7 +2003,7 @@ class MountService extends IMountService.Stub
             }
         }
 
-        mObbPathToStateMap.remove(obbState.rawPath);
+        mObbPathToStateMap.remove(obbState.filename);
     }
 
     private class ObbActionHandler extends Handler {
@@ -2302,32 +2111,33 @@ class MountService extends IMountService.Stub
                     synchronized (mObbMounts) {
                         final List<ObbState> obbStatesToRemove = new LinkedList<ObbState>();
 
-                        final Iterator<ObbState> i = mObbPathToStateMap.values().iterator();
+                        final Iterator<Entry<String, ObbState>> i =
+                                mObbPathToStateMap.entrySet().iterator();
                         while (i.hasNext()) {
-                            final ObbState state = i.next();
+                            final Entry<String, ObbState> obbEntry = i.next();
 
                             /*
                              * If this entry's source file is in the volume path
                              * that got unmounted, remove it because it's no
                              * longer valid.
                              */
-                            if (state.canonicalPath.startsWith(path)) {
-                                obbStatesToRemove.add(state);
+                            if (obbEntry.getKey().startsWith(path)) {
+                                obbStatesToRemove.add(obbEntry.getValue());
                             }
                         }
 
                         for (final ObbState obbState : obbStatesToRemove) {
                             if (DEBUG_OBB)
-                                Slog.i(TAG, "Removing state for " + obbState.rawPath);
+                                Slog.i(TAG, "Removing state for " + obbState.filename);
 
                             removeObbStateLocked(obbState);
 
                             try {
-                                obbState.token.onObbResult(obbState.rawPath, obbState.nonce,
+                                obbState.token.onObbResult(obbState.filename, obbState.nonce,
                                         OnObbStateChangeListener.UNMOUNTED);
                             } catch (RemoteException e) {
                                 Slog.i(TAG, "Couldn't send unmount notification for  OBB: "
-                                        + obbState.rawPath);
+                                        + obbState.filename);
                             }
                         }
                     }
@@ -2399,14 +2209,14 @@ class MountService extends IMountService.Stub
         protected ObbInfo getObbInfo() throws IOException {
             ObbInfo obbInfo;
             try {
-                obbInfo = mContainerService.getObbInfo(mObbState.ownerPath);
+                obbInfo = mContainerService.getObbInfo(mObbState.filename);
             } catch (RemoteException e) {
                 Slog.d(TAG, "Couldn't call DefaultContainerService to fetch OBB info for "
-                        + mObbState.ownerPath);
+                        + mObbState.filename);
                 obbInfo = null;
             }
             if (obbInfo == null) {
-                throw new IOException("Couldn't read OBB file: " + mObbState.ownerPath);
+                throw new IOException("Couldn't read OBB file: " + mObbState.filename);
             }
             return obbInfo;
         }
@@ -2417,7 +2227,7 @@ class MountService extends IMountService.Stub
             }
 
             try {
-                mObbState.token.onObbResult(mObbState.rawPath, mObbState.nonce, status);
+                mObbState.token.onObbResult(mObbState.filename, mObbState.nonce, status);
             } catch (RemoteException e) {
                 Slog.w(TAG, "MountServiceListener went away while calling onObbStateChanged");
             }
@@ -2426,12 +2236,10 @@ class MountService extends IMountService.Stub
 
     class MountObbAction extends ObbAction {
         private final String mKey;
-        private final int mCallingUid;
 
-        MountObbAction(ObbState obbState, String key, int callingUid) {
+        MountObbAction(ObbState obbState, String key) {
             super(obbState);
             mKey = key;
-            mCallingUid = callingUid;
         }
 
         @Override
@@ -2441,7 +2249,7 @@ class MountService extends IMountService.Stub
 
             final ObbInfo obbInfo = getObbInfo();
 
-            if (!isUidOwnerOfPackageOrSystem(obbInfo.packageName, mCallingUid)) {
+            if (!isUidOwnerOfPackageOrSystem(obbInfo.packageName, mObbState.callerUid)) {
                 Slog.w(TAG, "Denied attempt to mount OBB " + obbInfo.filename
                         + " which is owned by " + obbInfo.packageName);
                 sendNewStatusOrIgnore(OnObbStateChangeListener.ERROR_PERMISSION_DENIED);
@@ -2450,13 +2258,19 @@ class MountService extends IMountService.Stub
 
             final boolean isMounted;
             synchronized (mObbMounts) {
-                isMounted = mObbPathToStateMap.containsKey(mObbState.rawPath);
+                isMounted = mObbPathToStateMap.containsKey(obbInfo.filename);
             }
             if (isMounted) {
                 Slog.w(TAG, "Attempt to mount OBB which is already mounted: " + obbInfo.filename);
                 sendNewStatusOrIgnore(OnObbStateChangeListener.ERROR_ALREADY_MOUNTED);
                 return;
             }
+
+            /*
+             * The filename passed in might not be the canonical name, so just
+             * set the filename to the canonicalized version.
+             */
+            mObbState.filename = obbInfo.filename;
 
             final String hashedKey;
             if (mKey == null) {
@@ -2482,9 +2296,10 @@ class MountService extends IMountService.Stub
             }
 
             int rc = StorageResultCode.OperationSucceeded;
+            String cmd = String.format("obb mount %s %s %d", mObbState.filename, hashedKey,
+                    mObbState.callerUid);
             try {
-                mConnector.execute("obb", "mount", mObbState.voldPath, new SensitiveArg(hashedKey),
-                        mObbState.ownerGid);
+                mConnector.doCommand(cmd);
             } catch (NativeDaemonConnectorException e) {
                 int code = e.getCode();
                 if (code != VoldResponseCode.OpFailedStorageBusy) {
@@ -2494,7 +2309,7 @@ class MountService extends IMountService.Stub
 
             if (rc == StorageResultCode.OperationSucceeded) {
                 if (DEBUG_OBB)
-                    Slog.d(TAG, "Successfully mounted OBB " + mObbState.voldPath);
+                    Slog.d(TAG, "Successfully mounted OBB " + mObbState.filename);
 
                 synchronized (mObbMounts) {
                     addObbStateLocked(mObbState);
@@ -2517,7 +2332,14 @@ class MountService extends IMountService.Stub
         public String toString() {
             StringBuilder sb = new StringBuilder();
             sb.append("MountObbAction{");
-            sb.append(mObbState);
+            sb.append("filename=");
+            sb.append(mObbState.filename);
+            sb.append(",callerUid=");
+            sb.append(mObbState.callerUid);
+            sb.append(",token=");
+            sb.append(mObbState.token != null ? mObbState.token.toString() : "NULL");
+            sb.append(",binder=");
+            sb.append(mObbState.token != null ? mObbState.getBinder().toString() : "null");
             sb.append('}');
             return sb.toString();
         }
@@ -2538,30 +2360,30 @@ class MountService extends IMountService.Stub
 
             final ObbInfo obbInfo = getObbInfo();
 
-            final ObbState existingState;
+            final ObbState obbState;
             synchronized (mObbMounts) {
-                existingState = mObbPathToStateMap.get(mObbState.rawPath);
+                obbState = mObbPathToStateMap.get(obbInfo.filename);
             }
 
-            if (existingState == null) {
+            if (obbState == null) {
                 sendNewStatusOrIgnore(OnObbStateChangeListener.ERROR_NOT_MOUNTED);
                 return;
             }
 
-            if (existingState.ownerGid != mObbState.ownerGid) {
-                Slog.w(TAG, "Permission denied attempting to unmount OBB " + existingState.rawPath
-                        + " (owned by GID " + existingState.ownerGid + ")");
+            if (obbState.callerUid != mObbState.callerUid) {
+                Slog.w(TAG, "Permission denied attempting to unmount OBB " + obbInfo.filename
+                        + " (owned by " + obbInfo.packageName + ")");
                 sendNewStatusOrIgnore(OnObbStateChangeListener.ERROR_PERMISSION_DENIED);
                 return;
             }
 
+            mObbState.filename = obbInfo.filename;
+
             int rc = StorageResultCode.OperationSucceeded;
+            String cmd = String.format("obb unmount %s%s", mObbState.filename,
+                    (mForceUnmount ? " force" : ""));
             try {
-                final Command cmd = new Command("obb", "unmount", mObbState.voldPath);
-                if (mForceUnmount) {
-                    cmd.appendArg("force");
-                }
-                mConnector.execute(cmd);
+                mConnector.doCommand(cmd);
             } catch (NativeDaemonConnectorException e) {
                 int code = e.getCode();
                 if (code == VoldResponseCode.OpFailedStorageBusy) {
@@ -2576,12 +2398,12 @@ class MountService extends IMountService.Stub
 
             if (rc == StorageResultCode.OperationSucceeded) {
                 synchronized (mObbMounts) {
-                    removeObbStateLocked(existingState);
+                    removeObbStateLocked(obbState);
                 }
 
                 sendNewStatusOrIgnore(OnObbStateChangeListener.UNMOUNTED);
             } else {
-                Slog.w(TAG, "Could not unmount OBB: " + existingState);
+                Slog.w(TAG, "Could not mount OBB: " + mObbState.filename);
                 sendNewStatusOrIgnore(OnObbStateChangeListener.ERROR_COULD_NOT_UNMOUNT);
             }
         }
@@ -2595,60 +2417,18 @@ class MountService extends IMountService.Stub
         public String toString() {
             StringBuilder sb = new StringBuilder();
             sb.append("UnmountObbAction{");
-            sb.append(mObbState);
+            sb.append("filename=");
+            sb.append(mObbState.filename != null ? mObbState.filename : "null");
             sb.append(",force=");
             sb.append(mForceUnmount);
+            sb.append(",callerUid=");
+            sb.append(mObbState.callerUid);
+            sb.append(",token=");
+            sb.append(mObbState.token != null ? mObbState.token.toString() : "null");
+            sb.append(",binder=");
+            sb.append(mObbState.token != null ? mObbState.getBinder().toString() : "null");
             sb.append('}');
             return sb.toString();
-        }
-    }
-
-    @VisibleForTesting
-    public static String buildObbPath(final String canonicalPath, int userId, boolean forVold) {
-        // TODO: allow caller to provide Environment for full testing
-
-        // Only adjust paths when storage is emulated
-        if (!Environment.isExternalStorageEmulated()) {
-            return canonicalPath;
-        }
-
-        String path = canonicalPath.toString();
-
-        // First trim off any external storage prefix
-        final UserEnvironment userEnv = new UserEnvironment(userId);
-
-        // /storage/emulated/0
-        final String externalPath = userEnv.getExternalStorageDirectory().toString();
-        // /storage/emulated_legacy
-        final String legacyExternalPath = Environment.getLegacyExternalStorageDirectory()
-                .toString();
-
-        if (path.startsWith(externalPath)) {
-            path = path.substring(externalPath.length() + 1);
-        } else if (path.startsWith(legacyExternalPath)) {
-            path = path.substring(legacyExternalPath.length() + 1);
-        } else {
-            return canonicalPath;
-        }
-
-        // Handle special OBB paths on emulated storage
-        final String obbPath = "Android/obb";
-        if (path.startsWith(obbPath)) {
-            path = path.substring(obbPath.length() + 1);
-
-            if (forVold) {
-                return new File(Environment.getEmulatedStorageObbSource(), path).toString();
-            } else {
-                final UserEnvironment ownerEnv = new UserEnvironment(UserHandle.USER_OWNER);
-                return new File(ownerEnv.getExternalStorageObbDirectory(), path).toString();
-            }
-        }
-
-        // Handle normal external storage paths
-        if (forVold) {
-            return new File(Environment.getEmulatedStorageSource(userId), path).toString();
-        } else {
-            return new File(userEnv.getExternalStorageDirectory(), path).toString();
         }
     }
 
@@ -2686,7 +2466,7 @@ class MountService extends IMountService.Stub
 
         pw.println("");
 
-        synchronized (mVolumesLock) {
+        synchronized (mVolumes) {
             pw.println("  mVolumes:");
 
             final int N = mVolumes.size();
@@ -2696,10 +2476,6 @@ class MountService extends IMountService.Stub
                 pw.println(v.toString());
             }
         }
-
-        pw.println();
-        pw.println("  mConnection:");
-        mConnector.dump(fd, pw, args);
     }
 
     /** {@inheritDoc} */

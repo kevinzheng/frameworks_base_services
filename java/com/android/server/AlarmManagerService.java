@@ -22,7 +22,6 @@ import android.app.AlarmManager;
 import android.app.IAlarmManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -35,11 +34,9 @@ import android.os.Message;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
-import android.os.UserHandle;
-import android.os.WorkSource;
 import android.text.TextUtils;
 import android.text.format.Time;
-import android.util.Pair;
+import android.util.EventLog;
 import android.util.Slog;
 import android.util.TimeUtils;
 
@@ -47,7 +44,6 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
@@ -56,8 +52,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TimeZone;
-
-import com.android.internal.util.LocalLog;
 
 class AlarmManagerService extends IAlarmManager.Stub {
     // The threshold for how long an alarm can be late before we print a
@@ -83,9 +77,7 @@ class AlarmManagerService extends IAlarmManager.Stub {
             = new Intent().addFlags(Intent.FLAG_FROM_BACKGROUND);
     
     private final Context mContext;
-
-    private final LocalLog mLog = new LocalLog(TAG);
-
+    
     private Object mLock = new Object();
     
     private final ArrayList<Alarm> mRtcWakeupAlarms = new ArrayList<Alarm>();
@@ -97,7 +89,6 @@ class AlarmManagerService extends IAlarmManager.Stub {
     private int mDescriptor;
     private int mBroadcastRefCount = 0;
     private PowerManager.WakeLock mWakeLock;
-    private ArrayList<InFlight> mInFlight = new ArrayList<InFlight>();
     private final AlarmThread mWaitThread = new AlarmThread();
     private final AlarmHandler mHandler = new AlarmHandler();
     private ClockReceiver mClockReceiver;
@@ -105,59 +96,18 @@ class AlarmManagerService extends IAlarmManager.Stub {
     private final ResultReceiver mResultReceiver = new ResultReceiver();
     private final PendingIntent mTimeTickSender;
     private final PendingIntent mDateChangeSender;
-
-    private static final class InFlight extends Intent {
-        final PendingIntent mPendingIntent;
-        final Pair<String, ComponentName> mTarget;
-        final BroadcastStats mBroadcastStats;
-        final FilterStats mFilterStats;
-
-        InFlight(AlarmManagerService service, PendingIntent pendingIntent) {
-            mPendingIntent = pendingIntent;
-            Intent intent = pendingIntent.getIntent();
-            mTarget = intent != null
-                    ? new Pair<String, ComponentName>(intent.getAction(), intent.getComponent())
-                    : null;
-            mBroadcastStats = service.getStatsLocked(pendingIntent);
-            FilterStats fs = mBroadcastStats.filterStats.get(mTarget);
-            if (fs == null) {
-                fs = new FilterStats(mBroadcastStats, mTarget);
-                mBroadcastStats.filterStats.put(mTarget, fs);
-            }
-            mFilterStats = fs;
-        }
-    }
-
+    
     private static final class FilterStats {
-        final BroadcastStats mBroadcastStats;
-        final Pair<String, ComponentName> mTarget;
-
-        long aggregateTime;
         int count;
-        int numWakeup;
-        long startTime;
-        int nesting;
-
-        FilterStats(BroadcastStats broadcastStats, Pair<String, ComponentName> target) {
-            mBroadcastStats = broadcastStats;
-            mTarget = target;
-        }
     }
     
     private static final class BroadcastStats {
-        final String mPackageName;
-
         long aggregateTime;
-        int count;
         int numWakeup;
         long startTime;
         int nesting;
-        final HashMap<Pair<String, ComponentName>, FilterStats> filterStats
-                = new HashMap<Pair<String, ComponentName>, FilterStats>();
-
-        BroadcastStats(String packageName) {
-            mPackageName = packageName;
-        }
+        HashMap<Intent.FilterComparison, FilterStats> filterStats
+                = new HashMap<Intent.FilterComparison, FilterStats>();
     }
     
     private final HashMap<String, BroadcastStats> mBroadcastStats
@@ -177,14 +127,12 @@ class AlarmManagerService extends IAlarmManager.Stub {
         PowerManager pm = (PowerManager)context.getSystemService(Context.POWER_SERVICE);
         mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
         
-        mTimeTickSender = PendingIntent.getBroadcastAsUser(context, 0,
+        mTimeTickSender = PendingIntent.getBroadcast(context, 0,
                 new Intent(Intent.ACTION_TIME_TICK).addFlags(
-                        Intent.FLAG_RECEIVER_REGISTERED_ONLY), 0,
-                        UserHandle.ALL);
+                        Intent.FLAG_RECEIVER_REGISTERED_ONLY), 0);
         Intent intent = new Intent(Intent.ACTION_DATE_CHANGED);
         intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
-        mDateChangeSender = PendingIntent.getBroadcastAsUser(context, 0, intent,
-                Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT, UserHandle.ALL);
+        mDateChangeSender = PendingIntent.getBroadcast(context, 0, intent, 0);
         
         // now that we have initied the driver schedule the alarm
         mClockReceiver= new ClockReceiver();
@@ -292,39 +240,32 @@ class AlarmManagerService extends IAlarmManager.Stub {
                 "android.permission.SET_TIME_ZONE",
                 "setTimeZone");
 
-        long oldId = Binder.clearCallingIdentity();
-        try {
-            if (TextUtils.isEmpty(tz)) return;
-            TimeZone zone = TimeZone.getTimeZone(tz);
-            // Prevent reentrant calls from stepping on each other when writing
-            // the time zone property
-            boolean timeZoneWasChanged = false;
-            synchronized (this) {
-                String current = SystemProperties.get(TIMEZONE_PROPERTY);
-                if (current == null || !current.equals(zone.getID())) {
-                    if (localLOGV) {
-                        Slog.v(TAG, "timezone changed: " + current + ", new=" + zone.getID());
-                    }
-                    timeZoneWasChanged = true;
-                    SystemProperties.set(TIMEZONE_PROPERTY, zone.getID());
-                }
-
-                // Update the kernel timezone information
-                // Kernel tracks time offsets as 'minutes west of GMT'
-                int gmtOffset = zone.getOffset(System.currentTimeMillis());
-                setKernelTimezone(mDescriptor, -(gmtOffset / 60000));
+        if (TextUtils.isEmpty(tz)) return;
+        TimeZone zone = TimeZone.getTimeZone(tz);
+        // Prevent reentrant calls from stepping on each other when writing
+        // the time zone property
+        boolean timeZoneWasChanged = false;
+        synchronized (this) {
+            String current = SystemProperties.get(TIMEZONE_PROPERTY);
+            if (current == null || !current.equals(zone.getID())) {
+                if (localLOGV) Slog.v(TAG, "timezone changed: " + current + ", new=" + zone.getID());
+                timeZoneWasChanged = true; 
+                SystemProperties.set(TIMEZONE_PROPERTY, zone.getID());
             }
+            
+            // Update the kernel timezone information
+            // Kernel tracks time offsets as 'minutes west of GMT'
+            int gmtOffset = zone.getOffset(System.currentTimeMillis());
+            setKernelTimezone(mDescriptor, -(gmtOffset / 60000));
+        }
 
-            TimeZone.setDefault(null);
-
-            if (timeZoneWasChanged) {
-                Intent intent = new Intent(Intent.ACTION_TIMEZONE_CHANGED);
-                intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
-                intent.putExtra("time-zone", zone.getID());
-                mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(oldId);
+        TimeZone.setDefault(null);
+        
+        if (timeZoneWasChanged) {
+            Intent intent = new Intent(Intent.ACTION_TIMEZONE_CHANGED);
+            intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+            intent.putExtra("time-zone", zone.getID());
+            mContext.sendBroadcast(intent);
         }
     }
     
@@ -360,7 +301,7 @@ class AlarmManagerService extends IAlarmManager.Stub {
             }
         }
     }
-
+    
     public void removeLocked(String packageName) {
         removeLocked(mRtcWakeupAlarms, packageName);
         removeLocked(mRtcAlarms, packageName);
@@ -380,29 +321,6 @@ class AlarmManagerService extends IAlarmManager.Stub {
         while (it.hasNext()) {
             Alarm alarm = it.next();
             if (alarm.operation.getTargetPackage().equals(packageName)) {
-                it.remove();
-            }
-        }
-    }
-
-    public void removeUserLocked(int userHandle) {
-        removeUserLocked(mRtcWakeupAlarms, userHandle);
-        removeUserLocked(mRtcAlarms, userHandle);
-        removeUserLocked(mElapsedRealtimeWakeupAlarms, userHandle);
-        removeUserLocked(mElapsedRealtimeAlarms, userHandle);
-    }
-
-    private void removeUserLocked(ArrayList<Alarm> alarmList, int userHandle) {
-        if (alarmList.size() <= 0) {
-            return;
-        }
-
-        // iterator over the list removing any it where the intent match
-        Iterator<Alarm> it = alarmList.iterator();
-
-        while (it.hasNext()) {
-            Alarm alarm = it.next();
-            if (UserHandle.getUserId(alarm.operation.getCreatorUid()) == userHandle) {
                 it.remove();
             }
         }
@@ -543,104 +461,23 @@ class AlarmManagerService extends IAlarmManager.Stub {
                     dumpAlarmList(pw, mElapsedRealtimeAlarms, "  ", "ELAPSED", now);
                 }
             }
-
-            pw.println();
+            
+            pw.println(" ");
             pw.print("  Broadcast ref count: "); pw.println(mBroadcastRefCount);
-            pw.println();
-
-            if (mLog.dump(pw, "  Recent problems", "    ")) {
-                pw.println();
-            }
-
-            final FilterStats[] topFilters = new FilterStats[10];
-            final Comparator<FilterStats> comparator = new Comparator<FilterStats>() {
-                @Override
-                public int compare(FilterStats lhs, FilterStats rhs) {
-                    if (lhs.aggregateTime < rhs.aggregateTime) {
-                        return 1;
-                    } else if (lhs.aggregateTime > rhs.aggregateTime) {
-                        return -1;
-                    }
-                    return 0;
-                }
-            };
-            int len = 0;
-            for (Map.Entry<String, BroadcastStats> be : mBroadcastStats.entrySet()) {
-                BroadcastStats bs = be.getValue();
-                for (Map.Entry<Pair<String, ComponentName>, FilterStats> fe
-                        : bs.filterStats.entrySet()) {
-                    FilterStats fs = fe.getValue();
-                    int pos = len > 0
-                            ? Arrays.binarySearch(topFilters, 0, len, fs, comparator) : 0;
-                    if (pos < 0) {
-                        pos = -pos - 1;
-                    }
-                    if (pos < topFilters.length) {
-                        int copylen = topFilters.length - pos - 1;
-                        if (copylen > 0) {
-                            System.arraycopy(topFilters, pos, topFilters, pos+1, copylen);
-                        }
-                        topFilters[pos] = fs;
-                        if (len < topFilters.length) {
-                            len++;
-                        }
-                    }
-                }
-            }
-            if (len > 0) {
-                pw.println("  Top Alarms:");
-                for (int i=0; i<len; i++) {
-                    FilterStats fs = topFilters[i];
-                    pw.print("    ");
-                    if (fs.nesting > 0) pw.print("*ACTIVE* ");
-                    TimeUtils.formatDuration(fs.aggregateTime, pw);
-                    pw.print(" running, "); pw.print(fs.numWakeup);
-                    pw.print(" wakeups, "); pw.print(fs.count);
-                    pw.print(" alarms: "); pw.print(fs.mBroadcastStats.mPackageName);
-                    pw.println();
-                    pw.print("      ");
-                    if (fs.mTarget.first != null) {
-                        pw.print(" act="); pw.print(fs.mTarget.first);
-                    }
-                    if (fs.mTarget.second != null) {
-                        pw.print(" cmp="); pw.print(fs.mTarget.second.toShortString());
-                    }
-                    pw.println();
-                }
-            }
-
+            
             pw.println(" ");
             pw.println("  Alarm Stats:");
-            final ArrayList<FilterStats> tmpFilters = new ArrayList<FilterStats>();
             for (Map.Entry<String, BroadcastStats> be : mBroadcastStats.entrySet()) {
                 BroadcastStats bs = be.getValue();
-                pw.print("  ");
-                if (bs.nesting > 0) pw.print("*ACTIVE* ");
-                pw.print(be.getKey());
-                pw.print(" "); TimeUtils.formatDuration(bs.aggregateTime, pw);
-                        pw.print(" running, "); pw.print(bs.numWakeup);
-                        pw.println(" wakeups:");
-                tmpFilters.clear();
-                for (Map.Entry<Pair<String, ComponentName>, FilterStats> fe
+                pw.print("  "); pw.println(be.getKey());
+                pw.print("    "); pw.print(bs.aggregateTime);
+                        pw.print("ms running, "); pw.print(bs.numWakeup);
+                        pw.println(" wakeups");
+                for (Map.Entry<Intent.FilterComparison, FilterStats> fe
                         : bs.filterStats.entrySet()) {
-                    tmpFilters.add(fe.getValue());
-                }
-                Collections.sort(tmpFilters, comparator);
-                for (int i=0; i<tmpFilters.size(); i++) {
-                    FilterStats fs = tmpFilters.get(i);
-                    pw.print("    ");
-                            if (fs.nesting > 0) pw.print("*ACTIVE* ");
-                            TimeUtils.formatDuration(fs.aggregateTime, pw);
-                            pw.print(" "); pw.print(fs.numWakeup);
-                            pw.print(" wakes " ); pw.print(fs.count);
-                            pw.print(" alarms:");
-                            if (fs.mTarget.first != null) {
-                                pw.print(" act="); pw.print(fs.mTarget.first);
-                            }
-                            if (fs.mTarget.second != null) {
-                                pw.print(" cmp="); pw.print(fs.mTarget.second.toShortString());
-                            }
-                            pw.println();
+                    pw.print("    "); pw.print(fe.getValue().count);
+                            pw.print(" alarms: ");
+                            pw.println(fe.getKey().getIntent().toShortString(false, true, false));
                 }
             }
         }
@@ -797,7 +634,7 @@ class AlarmManagerService extends IAlarmManager.Stub {
                     Intent intent = new Intent(Intent.ACTION_TIME_CHANGED);
                     intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING
                             | Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-                    mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
+                    mContext.sendBroadcast(intent);
                 }
                 
                 synchronized (mLock) {
@@ -830,36 +667,21 @@ class AlarmManagerService extends IAlarmManager.Stub {
                                             Intent.EXTRA_ALARM_COUNT, alarm.count),
                                     mResultReceiver, mHandler);
                             
-                            // we have an active broadcast so stay awake.
+                            // we have an active broadcast so stay awake. 
                             if (mBroadcastRefCount == 0) {
-                                setWakelockWorkSource(alarm.operation);
                                 mWakeLock.acquire();
                             }
-                            final InFlight inflight = new InFlight(AlarmManagerService.this,
-                                    alarm.operation);
-                            mInFlight.add(inflight);
                             mBroadcastRefCount++;
-
-                            final BroadcastStats bs = inflight.mBroadcastStats;
-                            bs.count++;
+                            
+                            BroadcastStats bs = getStatsLocked(alarm.operation);
                             if (bs.nesting == 0) {
-                                bs.nesting = 1;
                                 bs.startTime = nowELAPSED;
                             } else {
                                 bs.nesting++;
                             }
-                            final FilterStats fs = inflight.mFilterStats;
-                            fs.count++;
-                            if (fs.nesting == 0) {
-                                fs.nesting = 1;
-                                fs.startTime = nowELAPSED;
-                            } else {
-                                fs.nesting++;
-                            }
                             if (alarm.type == AlarmManager.ELAPSED_REALTIME_WAKEUP
                                     || alarm.type == AlarmManager.RTC_WAKEUP) {
                                 bs.numWakeup++;
-                                fs.numWakeup++;
                                 ActivityManagerNative.noteWakeupAlarm(
                                         alarm.operation);
                             }
@@ -877,22 +699,7 @@ class AlarmManagerService extends IAlarmManager.Stub {
             }
         }
     }
-
-    void setWakelockWorkSource(PendingIntent pi) {
-        try {
-            final int uid = ActivityManagerNative.getDefault()
-                    .getUidForIntentSender(pi.getTarget());
-            if (uid >= 0) {
-                mWakeLock.setWorkSource(new WorkSource(uid));
-                return;
-            }
-        } catch (Exception e) {
-        }
-
-        // Something went wrong; fall back to attributing the lock to the OS
-        mWakeLock.setWorkSource(null);
-    }
-
+    
     private class AlarmHandler extends Handler {
         public static final int ALARM_EVENT = 1;
         public static final int MINUTE_CHANGE_EVENT = 2;
@@ -956,12 +763,16 @@ class AlarmManagerService extends IAlarmManager.Stub {
         }
         
         public void scheduleTimeTickEvent() {
+            Calendar calendar = Calendar.getInstance();
             final long currentTime = System.currentTimeMillis();
-            final long nextTime = 60000 * ((currentTime / 60000) + 1);
+            calendar.setTimeInMillis(currentTime);
+            calendar.add(Calendar.MINUTE, 1);
+            calendar.set(Calendar.SECOND, 0);
+            calendar.set(Calendar.MILLISECOND, 0);
 
             // Schedule this event for the amount of time that it would take to get to
             // the top of the next minute.
-            final long tickEventDelay = nextTime - currentTime;
+            final long tickEventDelay = calendar.getTimeInMillis() - currentTime;
 
             set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + tickEventDelay,
                     mTimeTickSender);
@@ -991,7 +802,6 @@ class AlarmManagerService extends IAlarmManager.Stub {
              // Register for events related to sdcard installation.
             IntentFilter sdFilter = new IntentFilter();
             sdFilter.addAction(Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE);
-            sdFilter.addAction(Intent.ACTION_USER_STOPPED);
             mContext.registerReceiver(this, sdFilter);
         }
         
@@ -1011,11 +821,6 @@ class AlarmManagerService extends IAlarmManager.Stub {
                     return;
                 } else if (Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE.equals(action)) {
                     pkgList = intent.getStringArrayExtra(Intent.EXTRA_CHANGED_PACKAGE_LIST);
-                } else if (Intent.ACTION_USER_STOPPED.equals(action)) {
-                    int userHandle = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1);
-                    if (userHandle >= 0) {
-                        removeUserLocked(userHandle);
-                    }
                 } else {
                     if (Intent.ACTION_PACKAGE_REMOVED.equals(action)
                             && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
@@ -1044,60 +849,35 @@ class AlarmManagerService extends IAlarmManager.Stub {
         String pkg = pi.getTargetPackage();
         BroadcastStats bs = mBroadcastStats.get(pkg);
         if (bs == null) {
-            bs = new BroadcastStats(pkg);
+            bs = new BroadcastStats();
             mBroadcastStats.put(pkg, bs);
         }
         return bs;
     }
-
+    
     class ResultReceiver implements PendingIntent.OnFinished {
         public void onSendFinished(PendingIntent pi, Intent intent, int resultCode,
                 String resultData, Bundle resultExtras) {
             synchronized (mLock) {
-                InFlight inflight = null;
-                for (int i=0; i<mInFlight.size(); i++) {
-                    if (mInFlight.get(i).mPendingIntent == pi) {
-                        inflight = mInFlight.remove(i);
-                        break;
-                    }
-                }
-                if (inflight != null) {
-                    final long nowELAPSED = SystemClock.elapsedRealtime();
-                    BroadcastStats bs = inflight.mBroadcastStats;
+                BroadcastStats bs = getStatsLocked(pi);
+                if (bs != null) {
                     bs.nesting--;
                     if (bs.nesting <= 0) {
                         bs.nesting = 0;
-                        bs.aggregateTime += nowELAPSED - bs.startTime;
+                        bs.aggregateTime += SystemClock.elapsedRealtime()
+                                - bs.startTime;
+                        Intent.FilterComparison fc = new Intent.FilterComparison(intent);
+                        FilterStats fs = bs.filterStats.get(fc);
+                        if (fs == null) {
+                            fs = new FilterStats();
+                            bs.filterStats.put(fc, fs);
+                        }
+                        fs.count++;
                     }
-                    FilterStats fs = inflight.mFilterStats;
-                    fs.nesting--;
-                    if (fs.nesting <= 0) {
-                        fs.nesting = 0;
-                        fs.aggregateTime += nowELAPSED - fs.startTime;
-                    }
-                } else {
-                    mLog.w("No in-flight alarm for " + pi + " " + intent);
                 }
                 mBroadcastRefCount--;
                 if (mBroadcastRefCount == 0) {
                     mWakeLock.release();
-                    if (mInFlight.size() > 0) {
-                        mLog.w("Finished all broadcasts with " + mInFlight.size()
-                                + " remaining inflights");
-                        for (int i=0; i<mInFlight.size(); i++) {
-                            mLog.w("  Remaining #" + i + ": " + mInFlight.get(i));
-                        }
-                        mInFlight.clear();
-                    }
-                } else {
-                    // the next of our alarms is now in flight.  reattribute the wakelock.
-                    if (mInFlight.size() > 0) {
-                        setWakelockWorkSource(mInFlight.get(0).mPendingIntent);
-                    } else {
-                        // should never happen
-                        mLog.w("Alarm wakelock still held but sent queue empty");
-                        mWakeLock.setWorkSource(null);
-                    }
                 }
             }
         }

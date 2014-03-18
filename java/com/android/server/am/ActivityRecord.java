@@ -16,12 +16,10 @@
 
 package com.android.server.am;
 
-import com.android.internal.app.ResolverActivity;
 import com.android.server.AttributeCache;
 import com.android.server.am.ActivityStack.ActivityState;
 
 import android.app.Activity;
-import android.app.ActivityOptions;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -29,15 +27,12 @@ import android.content.pm.ApplicationInfo;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.UserHandle;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
@@ -53,14 +48,11 @@ import java.util.HashSet;
 /**
  * An entry in the history stack, representing an activity.
  */
-final class ActivityRecord {
+final class ActivityRecord extends IApplicationToken.Stub {
     final ActivityManagerService service; // owner
     final ActivityStack stack; // owner
-    final IApplicationToken.Stub appToken; // window manager token
     final ActivityInfo info; // all about me
     final int launchedFromUid; // always the uid who started the activity.
-    final String launchedFromPackage; // always the package who started the activity.
-    final int userId;          // Which user is this running for?
     final Intent intent;    // the original intent that generated us
     final ComponentName realActivity;  // the intent component, or target of an alias.
     final String shortComponentName; // the short component name of the intent
@@ -86,10 +78,7 @@ final class ActivityRecord {
     ThumbnailHolder thumbHolder; // where our thumbnails should go.
     long launchTime;        // when we starting launching this activity
     long startTime;         // last time this activity was started
-    long lastVisibleTime;   // last time this activity became visible
     long cpuTimeAtResume;   // the cpu time of host process at the time of resuming activity
-    long pauseTime;         // last time we started pausing the activity
-    long launchTickTime;    // base time for launch tick messages
     Configuration configuration; // configuration activity was last running in
     CompatibilityInfo compat;// last used compatibility mode
     ActivityRecord resultTo; // who started this entry, so will get our reply
@@ -98,7 +87,6 @@ final class ActivityRecord {
     ArrayList results;      // pending ActivityResult objs we have received
     HashSet<WeakReference<PendingIntentRecord>> pendingResults; // all pending intents for this act
     ArrayList newIntents;   // any pending new intents for single-top mode
-    ActivityOptions pendingOptions; // most recently given options
     HashSet<ConnectionRecord> connections; // All ConnectionRecord we hold
     UriPermissionOwner uriPermissions; // current special URI access perms.
     ProcessRecord app;      // if non-null, hosting application
@@ -124,40 +112,34 @@ final class ActivityRecord {
     boolean frozenBeforeDestroy;// has been frozen but not yet destroyed.
     boolean immersive;      // immersive mode (don't interrupt if possible)
     boolean forceNewConfig; // force re-create with new config next time
-    int launchCount;        // count of launches since last state
-    long lastLaunchTime;    // time of last lauch of this activity
 
     String stringName;      // for caching of toString().
     
     private boolean inHistory;  // are we in the history stack?
 
     void dump(PrintWriter pw, String prefix) {
-        final long now = SystemClock.uptimeMillis();
         pw.print(prefix); pw.print("packageName="); pw.print(packageName);
                 pw.print(" processName="); pw.println(processName);
         pw.print(prefix); pw.print("launchedFromUid="); pw.print(launchedFromUid);
-                pw.print(" launchedFromPackage="); pw.println(launchedFromPackage);
-                pw.print(" userId="); pw.println(userId);
-        pw.print(prefix); pw.print("app="); pw.println(app);
-        pw.print(prefix); pw.println(intent.toInsecureStringWithClip());
+                pw.print(" app="); pw.println(app);
+        pw.print(prefix); pw.println(intent.toInsecureString());
         pw.print(prefix); pw.print("frontOfTask="); pw.print(frontOfTask);
                 pw.print(" task="); pw.println(task);
         pw.print(prefix); pw.print("taskAffinity="); pw.println(taskAffinity);
         pw.print(prefix); pw.print("realActivity=");
                 pw.println(realActivity.flattenToShortString());
-        pw.print(prefix); pw.print("baseDir="); pw.println(baseDir);
-        if (!resDir.equals(baseDir)) {
-            pw.print(prefix); pw.print("resDir="); pw.println(resDir);
-        }
-        pw.print(prefix); pw.print("dataDir="); pw.println(dataDir);
+        pw.print(prefix); pw.print("base="); pw.print(baseDir);
+                if (!resDir.equals(baseDir)) pw.print(" res="); pw.print(resDir);
+                pw.print(" data="); pw.println(dataDir);
+        pw.print(prefix); pw.print("labelRes=0x");
+                pw.print(Integer.toHexString(labelRes));
+                pw.print(" icon=0x"); pw.print(Integer.toHexString(icon));
+                pw.print(" theme=0x"); pw.println(Integer.toHexString(theme));
         pw.print(prefix); pw.print("stateNotNeeded="); pw.print(stateNotNeeded);
                 pw.print(" componentSpecified="); pw.print(componentSpecified);
                 pw.print(" isHomeActivity="); pw.println(isHomeActivity);
-        pw.print(prefix); pw.print("compat="); pw.print(compat);
-                pw.print(" labelRes=0x"); pw.print(Integer.toHexString(labelRes));
-                pw.print(" icon=0x"); pw.print(Integer.toHexString(icon));
-                pw.print(" theme=0x"); pw.println(Integer.toHexString(theme));
         pw.print(prefix); pw.print("config="); pw.println(configuration);
+        pw.print(prefix); pw.print("compat="); pw.println(compat);
         if (resultTo != null || resultWho != null) {
             pw.print(prefix); pw.print("resultTo="); pw.print(resultTo);
                     pw.print(" resultWho="); pw.print(resultWho);
@@ -166,33 +148,8 @@ final class ActivityRecord {
         if (results != null) {
             pw.print(prefix); pw.print("results="); pw.println(results);
         }
-        if (pendingResults != null && pendingResults.size() > 0) {
-            pw.print(prefix); pw.println("Pending Results:");
-            for (WeakReference<PendingIntentRecord> wpir : pendingResults) {
-                PendingIntentRecord pir = wpir != null ? wpir.get() : null;
-                pw.print(prefix); pw.print("  - ");
-                if (pir == null) {
-                    pw.println("null");
-                } else {
-                    pw.println(pir);
-                    pir.dump(pw, prefix + "    ");
-                }
-            }
-        }
-        if (newIntents != null && newIntents.size() > 0) {
-            pw.print(prefix); pw.println("Pending New Intents:");
-            for (int i=0; i<newIntents.size(); i++) {
-                Intent intent = (Intent)newIntents.get(i);
-                pw.print(prefix); pw.print("  - ");
-                if (intent == null) {
-                    pw.println("null");
-                } else {
-                    pw.println(intent.toShortString(false, true, false, true));
-                }
-            }
-        }
-        if (pendingOptions != null) {
-            pw.print(prefix); pw.print("pendingOptions="); pw.println(pendingOptions);
+        if (pendingResults != null) {
+            pw.print(prefix); pw.print("pendingResults="); pw.println(pendingResults);
         }
         if (uriPermissions != null) {
             if (uriPermissions.readUriPermissions != null) {
@@ -205,12 +162,7 @@ final class ActivityRecord {
             }
         }
         pw.print(prefix); pw.print("launchFailed="); pw.print(launchFailed);
-                pw.print(" launchCount="); pw.print(launchCount);
-                pw.print(" lastLaunchTime=");
-                if (lastLaunchTime == 0) pw.print("0");
-                else TimeUtils.formatDuration(lastLaunchTime, now, pw);
-                pw.println();
-        pw.print(prefix); pw.print(" haveState="); pw.print(haveState);
+                pw.print(" haveState="); pw.print(haveState);
                 pw.print(" icicle="); pw.println(icicle);
         pw.print(prefix); pw.print("state="); pw.print(state);
                 pw.print(" stopped="); pw.print(stopped);
@@ -228,29 +180,15 @@ final class ActivityRecord {
         pw.print(prefix); pw.print("frozenBeforeDestroy="); pw.print(frozenBeforeDestroy);
                 pw.print(" thumbnailNeeded="); pw.print(thumbnailNeeded);
                 pw.print(" forceNewConfig="); pw.println(forceNewConfig);
-        pw.print(prefix); pw.print("thumbHolder: ");
-                pw.print(Integer.toHexString(System.identityHashCode(thumbHolder)));
-                if (thumbHolder != null) {
-                    pw.print(" bm="); pw.print(thumbHolder.lastThumbnail);
-                    pw.print(" desc="); pw.print(thumbHolder.lastDescription);
-                }
-                pw.println();
+        pw.print(prefix); pw.print("thumbHolder="); pw.println(thumbHolder);
         if (launchTime != 0 || startTime != 0) {
             pw.print(prefix); pw.print("launchTime=");
-                    if (launchTime == 0) pw.print("0");
-                    else TimeUtils.formatDuration(launchTime, now, pw);
-                    pw.print(" startTime=");
-                    if (startTime == 0) pw.print("0");
-                    else TimeUtils.formatDuration(startTime, now, pw);
-                    pw.println();
+                    TimeUtils.formatDuration(launchTime, pw); pw.print(" startTime=");
+                    TimeUtils.formatDuration(startTime, pw); pw.println("");
         }
-        if (lastVisibleTime != 0 || waitingVisible || nowVisible) {
+        if (waitingVisible || nowVisible) {
             pw.print(prefix); pw.print("waitingVisible="); pw.print(waitingVisible);
-                    pw.print(" nowVisible="); pw.print(nowVisible);
-                    pw.print(" lastVisibleTime=");
-                    if (lastVisibleTime == 0) pw.print("0");
-                    else TimeUtils.formatDuration(lastVisibleTime, now, pw);
-                    pw.println();
+                    pw.print(" nowVisible="); pw.println(nowVisible);
         }
         if (configDestroy || configChangeFlags != 0) {
             pw.print(prefix); pw.print("configDestroy="); pw.print(configDestroy);
@@ -262,82 +200,15 @@ final class ActivityRecord {
         }
     }
 
-    static class Token extends IApplicationToken.Stub {
-        final WeakReference<ActivityRecord> weakActivity;
-
-        Token(ActivityRecord activity) {
-            weakActivity = new WeakReference<ActivityRecord>(activity);
-        }
-
-        @Override public void windowsDrawn() throws RemoteException {
-            ActivityRecord activity = weakActivity.get();
-            if (activity != null) {
-                activity.windowsDrawn();
-            }
-        }
-
-        @Override public void windowsVisible() throws RemoteException {
-            ActivityRecord activity = weakActivity.get();
-            if (activity != null) {
-                activity.windowsVisible();
-            }
-        }
-
-        @Override public void windowsGone() throws RemoteException {
-            ActivityRecord activity = weakActivity.get();
-            if (activity != null) {
-                activity.windowsGone();
-            }
-        }
-
-        @Override public boolean keyDispatchingTimedOut() throws RemoteException {
-            ActivityRecord activity = weakActivity.get();
-            if (activity != null) {
-                return activity.keyDispatchingTimedOut();
-            }
-            return false;
-        }
-
-        @Override public long getKeyDispatchingTimeout() throws RemoteException {
-            ActivityRecord activity = weakActivity.get();
-            if (activity != null) {
-                return activity.getKeyDispatchingTimeout();
-            }
-            return 0;
-        }
-
-        public String toString() {
-            StringBuilder sb = new StringBuilder(128);
-            sb.append("Token{");
-            sb.append(Integer.toHexString(System.identityHashCode(this)));
-            sb.append(' ');
-            sb.append(weakActivity.get());
-            sb.append('}');
-            return sb.toString();
-        }
-    }
-
-    static ActivityRecord forToken(IBinder token) {
-        try {
-            return token != null ? ((Token)token).weakActivity.get() : null;
-        } catch (ClassCastException e) {
-            Slog.w(ActivityManagerService.TAG, "Bad activity token: " + token, e);
-            return null;
-        }
-    }
-
     ActivityRecord(ActivityManagerService _service, ActivityStack _stack, ProcessRecord _caller,
-            int _launchedFromUid, String _launchedFromPackage, Intent _intent, String _resolvedType,
+            int _launchedFromUid, Intent _intent, String _resolvedType,
             ActivityInfo aInfo, Configuration _configuration,
             ActivityRecord _resultTo, String _resultWho, int _reqCode,
             boolean _componentSpecified) {
         service = _service;
         stack = _stack;
-        appToken = new Token(this);
         info = aInfo;
         launchedFromUid = _launchedFromUid;
-        launchedFromPackage = _launchedFromPackage;
-        userId = UserHandle.getUserId(aInfo.applicationInfo.uid);
         intent = _intent;
         shortComponentName = _intent.getComponent().flattenToShortString();
         resolvedType = _resolvedType;
@@ -349,6 +220,7 @@ final class ActivityRecord {
         state = ActivityState.INITIALIZING;
         frontOfTask = false;
         launchFailed = false;
+        haveState = false;
         stopped = false;
         delayedResume = false;
         finishing = false;
@@ -361,11 +233,6 @@ final class ActivityRecord {
         thumbnailNeeded = false;
         idle = false;
         hasBeenLaunched = false;
-
-        // This starts out true, since the initial state of an activity
-        // is that we have everything, and we shouldn't never consider it
-        // lacking in state to be removed if it dies.
-        haveState = true;
 
         if (aInfo != null) {
             if (aInfo.targetActivity == null
@@ -418,7 +285,7 @@ final class ActivityRecord {
             launchMode = aInfo.launchMode;
             
             AttributeCache.Entry ent = AttributeCache.instance().get(packageName,
-                    realTheme, com.android.internal.R.styleable.Window, userId);
+                    realTheme, com.android.internal.R.styleable.Window);
             fullscreen = ent != null && !ent.array.getBoolean(
                     com.android.internal.R.styleable.Window_windowIsFloating, false)
                     && !ent.array.getBoolean(
@@ -436,7 +303,7 @@ final class ActivityRecord {
                         _intent.getData() == null &&
                         _intent.getType() == null &&
                         (intent.getFlags()&Intent.FLAG_ACTIVITY_NEW_TASK) != 0 &&
-                        !ResolverActivity.class.getName().equals(realActivity.getClassName())) {
+                        !"android".equals(realActivity.getClassName())) {
                     // This sure looks like a home activity!
                     // Note the last check is so we don't count the resolver
                     // activity as being home...  really, we don't care about
@@ -505,7 +372,6 @@ final class ActivityRecord {
             if (task != null && !finishing) {
                 task.numActivities--;
             }
-            clearOptionsLocked();
         }
     }
 
@@ -518,9 +384,6 @@ final class ActivityRecord {
             finishing = true;
             if (task != null && inHistory) {
                 task.numActivities--;
-            }
-            if (stopped) {
-                clearOptionsLocked();
             }
         }
     }
@@ -574,22 +437,15 @@ final class ActivityRecord {
      */
     final void deliverNewIntentLocked(int callingUid, Intent intent) {
         boolean sent = false;
-        // The activity now gets access to the data associated with this Intent.
-        service.grantUriPermissionFromIntentLocked(callingUid, packageName,
-                intent, getUriPermissionsLocked());
-        // We want to immediately deliver the intent to the activity if
-        // it is currently the top resumed activity...  however, if the
-        // device is sleeping, then all activities are stopped, so in that
-        // case we will deliver it if this is the current top activity on its
-        // stack.
-        if ((state == ActivityState.RESUMED || (service.mSleeping
-                        && stack.topRunningActivityLocked(null) == this))
+        if (state == ActivityState.RESUMED
                 && app != null && app.thread != null) {
             try {
                 ArrayList<Intent> ar = new ArrayList<Intent>();
                 intent = new Intent(intent);
                 ar.add(intent);
-                app.thread.scheduleNewIntent(ar, appToken);
+                service.grantUriPermissionFromIntentLocked(callingUid, packageName,
+                        intent, getUriPermissionsLocked());
+                app.thread.scheduleNewIntent(ar, this);
                 sent = true;
             } catch (RemoteException e) {
                 Slog.w(ActivityManagerService.TAG,
@@ -604,81 +460,6 @@ final class ActivityRecord {
         }
     }
 
-    void updateOptionsLocked(Bundle options) {
-        if (options != null) {
-            if (pendingOptions != null) {
-                pendingOptions.abort();
-            }
-            pendingOptions = new ActivityOptions(options);
-        }
-    }
-
-    void updateOptionsLocked(ActivityOptions options) {
-        if (options != null) {
-            if (pendingOptions != null) {
-                pendingOptions.abort();
-            }
-            pendingOptions = options;
-        }
-    }
-
-    void applyOptionsLocked() {
-        if (pendingOptions != null) {
-            final int animationType = pendingOptions.getAnimationType();
-            switch (animationType) {
-                case ActivityOptions.ANIM_CUSTOM:
-                    service.mWindowManager.overridePendingAppTransition(
-                            pendingOptions.getPackageName(),
-                            pendingOptions.getCustomEnterResId(),
-                            pendingOptions.getCustomExitResId(),
-                            pendingOptions.getOnAnimationStartListener());
-                    break;
-                case ActivityOptions.ANIM_SCALE_UP:
-                    service.mWindowManager.overridePendingAppTransitionScaleUp(
-                            pendingOptions.getStartX(), pendingOptions.getStartY(),
-                            pendingOptions.getStartWidth(), pendingOptions.getStartHeight());
-                    if (intent.getSourceBounds() == null) {
-                        intent.setSourceBounds(new Rect(pendingOptions.getStartX(),
-                                pendingOptions.getStartY(),
-                                pendingOptions.getStartX()+pendingOptions.getStartWidth(),
-                                pendingOptions.getStartY()+pendingOptions.getStartHeight()));
-                    }
-                    break;
-                case ActivityOptions.ANIM_THUMBNAIL_SCALE_UP:
-                case ActivityOptions.ANIM_THUMBNAIL_SCALE_DOWN:
-                    boolean scaleUp = (animationType == ActivityOptions.ANIM_THUMBNAIL_SCALE_UP);
-                    service.mWindowManager.overridePendingAppTransitionThumb(
-                            pendingOptions.getThumbnail(),
-                            pendingOptions.getStartX(), pendingOptions.getStartY(),
-                            pendingOptions.getOnAnimationStartListener(),
-                            scaleUp);
-                    if (intent.getSourceBounds() == null) {
-                        intent.setSourceBounds(new Rect(pendingOptions.getStartX(),
-                                pendingOptions.getStartY(),
-                                pendingOptions.getStartX()
-                                        + pendingOptions.getThumbnail().getWidth(),
-                                pendingOptions.getStartY()
-                                        + pendingOptions.getThumbnail().getHeight()));
-                    }
-                    break;
-            }
-            pendingOptions = null;
-        }
-    }
-
-    void clearOptionsLocked() {
-        if (pendingOptions != null) {
-            pendingOptions.abort();
-            pendingOptions = null;
-        }
-    }
-
-    ActivityOptions takeOptionsLocked() {
-        ActivityOptions opts = pendingOptions;
-        pendingOptions = null;
-        return opts;
-    }
-
     void removeUriPermissionsLocked() {
         if (uriPermissions != null) {
             uriPermissions.removeUriPermissionsLocked();
@@ -689,14 +470,14 @@ final class ActivityRecord {
     void pauseKeyDispatchingLocked() {
         if (!keysPaused) {
             keysPaused = true;
-            service.mWindowManager.pauseKeyDispatching(appToken);
+            service.mWindowManager.pauseKeyDispatching(this);
         }
     }
 
     void resumeKeyDispatchingLocked() {
         if (keysPaused) {
             keysPaused = false;
-            service.mWindowManager.resumeKeyDispatching(appToken);
+            service.mWindowManager.resumeKeyDispatching(this);
         }
     }
 
@@ -706,39 +487,17 @@ final class ActivityRecord {
         }
         if (thumbHolder != null) {
             if (newThumbnail != null) {
-                if (ActivityManagerService.DEBUG_THUMBNAILS) Slog.i(ActivityManagerService.TAG,
-                        "Setting thumbnail of " + this + " holder " + thumbHolder
-                        + " to " + newThumbnail);
                 thumbHolder.lastThumbnail = newThumbnail;
             }
             thumbHolder.lastDescription = description;
         }
     }
 
-    void startLaunchTickingLocked() {
-        if (ActivityManagerService.IS_USER_BUILD) {
-            return;
+    void clearThumbnail() {
+        if (thumbHolder != null) {
+            thumbHolder.lastThumbnail = null;
+            thumbHolder.lastDescription = null;
         }
-        if (launchTickTime == 0) {
-            launchTickTime = SystemClock.uptimeMillis();
-            continueLaunchTickingLocked();
-        }
-    }
-
-    boolean continueLaunchTickingLocked() {
-        if (launchTickTime != 0) {
-            Message msg = stack.mHandler.obtainMessage(ActivityStack.LAUNCH_TICK_MSG);
-            msg.obj = this;
-            stack.mHandler.removeMessages(ActivityStack.LAUNCH_TICK_MSG);
-            stack.mHandler.sendMessageDelayed(msg, ActivityStack.LAUNCH_TICK);
-            return true;
-        }
-        return false;
-    }
-
-    void finishLaunchTickingLocked() {
-        launchTickTime = 0;
-        stack.mHandler.removeMessages(ActivityStack.LAUNCH_TICK_MSG);
     }
 
     // IApplicationToken
@@ -753,18 +512,18 @@ final class ActivityRecord {
     
     public void startFreezingScreenLocked(ProcessRecord app, int configChanges) {
         if (mayFreezeScreenLocked(app)) {
-            service.mWindowManager.startAppFreezingScreen(appToken, configChanges);
+            service.mWindowManager.startAppFreezingScreen(this, configChanges);
         }
     }
     
     public void stopFreezingScreenLocked(boolean force) {
         if (force || frozenBeforeDestroy) {
             frozenBeforeDestroy = false;
-            service.mWindowManager.stopAppFreezingScreen(appToken, force);
+            service.mWindowManager.stopAppFreezingScreen(this, force);
         }
     }
     
-    public void windowsDrawn() {
+    public void windowsVisible() {
         synchronized(service) {
             if (launchTime != 0) {
                 final long curTime = SystemClock.uptimeMillis();
@@ -772,8 +531,8 @@ final class ActivityRecord {
                 final long totalTime = stack.mInitialStartTime != 0
                         ? (curTime - stack.mInitialStartTime) : thisTime;
                 if (ActivityManagerService.SHOW_ACTIVITY_START_TIME) {
-                    EventLog.writeEvent(EventLogTags.AM_ACTIVITY_LAUNCH_TIME,
-                            userId, System.identityHashCode(this), shortComponentName,
+                    EventLog.writeEvent(EventLogTags.ACTIVITY_LAUNCH_TIME,
+                            System.identityHashCode(this), shortComponentName,
                             thisTime, totalTime);
                     StringBuilder sb = service.mStringBuilder;
                     sb.setLength(0);
@@ -796,18 +555,11 @@ final class ActivityRecord {
                 stack.mInitialStartTime = 0;
             }
             startTime = 0;
-            finishLaunchTickingLocked();
-        }
-    }
-
-    public void windowsVisible() {
-        synchronized(service) {
             stack.reportActivityVisibleLocked(this);
             if (ActivityManagerService.DEBUG_SWITCH) Log.v(
                     ActivityManagerService.TAG, "windowsVisible(): " + this);
             if (!nowVisible) {
                 nowVisible = true;
-                lastVisibleTime = SystemClock.uptimeMillis();
                 if (!idle) {
                     // Instead of doing the full stop routine here, let's just
                     // hide any activities we now can, and let them stop when
@@ -868,19 +620,50 @@ final class ActivityRecord {
 
     public boolean keyDispatchingTimedOut() {
         ActivityRecord r;
-        ProcessRecord anrApp;
+        ProcessRecord anrApp = null;
         synchronized(service) {
             r = getWaitingHistoryRecordLocked();
-            anrApp = r != null ? r.app : null;
+            if (r != null && r.app != null) {
+                if (r.app.debugging) {
+                    return false;
+                }
+                
+                if (service.mDidDexOpt) {
+                    // Give more time since we were dexopting.
+                    service.mDidDexOpt = false;
+                    return false;
+                }
+                
+                if (r.app.instrumentationClass == null) { 
+                    anrApp = r.app;
+                } else {
+                    Bundle info = new Bundle();
+                    info.putString("shortMsg", "keyDispatchingTimedOut");
+                    info.putString("longMsg", "Timed out while dispatching key event");
+                    service.finishInstrumentationLocked(
+                            r.app, Activity.RESULT_CANCELED, info);
+                }
+            }
         }
-        return service.inputDispatchingTimedOut(anrApp, r, this, false);
+        
+        if (anrApp != null) {
+            service.appNotResponding(anrApp, r, this,
+                    "keyDispatchingTimedOut");
+        }
+        
+        return true;
     }
     
     /** Returns the key dispatching timeout for this application token. */
     public long getKeyDispatchingTimeout() {
         synchronized(service) {
             ActivityRecord r = getWaitingHistoryRecordLocked();
-            return ActivityManagerService.getInputDispatchingTimeoutLocked(r);
+            if (r != null && r.app != null
+                    && (r.app.instrumentationClass != null || r.app.usingWrapper)) {
+                return ActivityManagerService.INSTRUMENTATION_KEY_DISPATCHING_TIMEOUT;
+            }
+
+            return ActivityManagerService.KEY_DISPATCHING_TIMEOUT;
         }
     }
 
@@ -899,7 +682,7 @@ final class ActivityRecord {
         }
         if (app != null && app.thread != null) {
             try {
-                app.thread.scheduleSleeping(appToken, _sleeping);
+                app.thread.scheduleSleeping(this, _sleeping);
                 if (sleeping && !stack.mGoingToSleepActivities.contains(this)) {
                     stack.mGoingToSleepActivities.add(this);
                 }
@@ -918,8 +701,6 @@ final class ActivityRecord {
         StringBuilder sb = new StringBuilder(128);
         sb.append("ActivityRecord{");
         sb.append(Integer.toHexString(System.identityHashCode(this)));
-        sb.append(" u");
-        sb.append(userId);
         sb.append(' ');
         sb.append(intent.getComponent().flattenToShortString());
         sb.append('}');

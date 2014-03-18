@@ -16,150 +16,64 @@
 
 package com.android.server.connectivity;
 
-import static android.Manifest.permission.BIND_VPN_SERVICE;
-
 import android.app.Notification;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
-import android.net.BaseNetworkStateTracker;
-import android.net.ConnectivityManager;
-import android.net.IConnectivityManager;
 import android.net.INetworkManagementEventObserver;
-import android.net.LinkProperties;
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
-import android.net.NetworkInfo;
-import android.net.RouteInfo;
-import android.net.NetworkInfo.DetailedState;
 import android.os.Binder;
-import android.os.FileUtils;
 import android.os.IBinder;
-import android.os.INetworkManagementService;
 import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
-import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.SystemService;
-import android.os.UserHandle;
-import android.security.Credentials;
-import android.security.KeyStore;
+import android.os.SystemProperties;
 import android.util.Log;
-import android.widget.Toast;
 
 import com.android.internal.R;
 import com.android.internal.net.LegacyVpnInfo;
 import com.android.internal.net.VpnConfig;
-import com.android.internal.net.VpnProfile;
-import com.android.internal.util.Preconditions;
 import com.android.server.ConnectivityService.VpnCallback;
-import com.android.server.net.BaseNetworkObserver;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charsets;
 import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import libcore.io.IoUtils;
 
 /**
  * @hide
  */
-public class Vpn extends BaseNetworkStateTracker {
-    private static final String TAG = "Vpn";
-    private static final boolean LOGD = true;
-    
-    // TODO: create separate trackers for each unique VPN to support
-    // automated reconnection
+public class Vpn extends INetworkManagementEventObserver.Stub {
 
+    private final static String TAG = "Vpn";
+
+    private final static String BIND_VPN_SERVICE =
+            android.Manifest.permission.BIND_VPN_SERVICE;
+
+    private final Context mContext;
     private final VpnCallback mCallback;
 
     private String mPackage = VpnConfig.LEGACY_VPN;
     private String mInterface;
     private Connection mConnection;
     private LegacyVpnRunner mLegacyVpnRunner;
-    private PendingIntent mStatusIntent;
-    private volatile boolean mEnableNotif = true;
-    private volatile boolean mEnableTeardown = true;
-    private final IConnectivityManager mConnService;
 
-    public Vpn(Context context, VpnCallback callback, INetworkManagementService netService,
-            IConnectivityManager connService) {
-        // TODO: create dedicated TYPE_VPN network type
-        super(ConnectivityManager.TYPE_DUMMY);
+    public Vpn(Context context, VpnCallback callback) {
         mContext = context;
         mCallback = callback;
-        mConnService = connService;
-
-        try {
-            netService.registerObserver(mObserver);
-        } catch (RemoteException e) {
-            Log.wtf(TAG, "Problem registering observer", e);
-        }
-    }
-
-    /**
-     * Set if this object is responsible for showing its own notifications. When
-     * {@code false}, notifications are handled externally by someone else.
-     */
-    public void setEnableNotifications(boolean enableNotif) {
-        mEnableNotif = enableNotif;
-    }
-
-    /**
-     * Set if this object is responsible for watching for {@link NetworkInfo}
-     * teardown. When {@code false}, teardown is handled externally by someone
-     * else.
-     */
-    public void setEnableTeardown(boolean enableTeardown) {
-        mEnableTeardown = enableTeardown;
-    }
-
-    @Override
-    protected void startMonitoringInternal() {
-        // Ignored; events are sent through callbacks for now
-    }
-
-    @Override
-    public boolean teardown() {
-        // TODO: finish migration to unique tracker for each VPN
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean reconnect() {
-        // TODO: finish migration to unique tracker for each VPN
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public String getTcpBufferSizesPropName() {
-        return PROP_TCP_BUFFER_UNKNOWN;
-    }
-
-    /**
-     * Update current state, dispaching event to listeners.
-     */
-    private void updateState(DetailedState detailedState, String reason) {
-        if (LOGD) Log.d(TAG, "setting state=" + detailedState + ", reason=" + reason);
-        mNetworkInfo.setDetailedState(detailedState, reason, null);
-        mCallback.onStateChanged(new NetworkInfo(mNetworkInfo));
     }
 
     /**
@@ -192,19 +106,16 @@ public class Vpn extends BaseNetworkStateTracker {
             return true;
         }
 
-        // Check if the caller is authorized.
-        enforceControlPermission();
+        // Only system user can revoke a package.
+        if (Binder.getCallingUid() != Process.SYSTEM_UID) {
+            throw new SecurityException("Unauthorized Caller");
+        }
 
         // Reset the interface and hide the notification.
         if (mInterface != null) {
             jniReset(mInterface);
-            final long token = Binder.clearCallingIdentity();
-            try {
-                mCallback.restore();
-                hideNotification();
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
+            mCallback.restore();
+            hideNotification();
             mInterface = null;
         }
 
@@ -225,7 +136,6 @@ public class Vpn extends BaseNetworkStateTracker {
 
         Log.i(TAG, "Switched from " + mPackage + " to " + newPackage);
         mPackage = newPackage;
-        updateState(DetailedState.IDLE, "prepare");
         return true;
     }
 
@@ -234,7 +144,7 @@ public class Vpn extends BaseNetworkStateTracker {
      * interface. The socket is NOT closed by this method.
      *
      * @param socket The socket to be bound.
-     * @param interfaze The name of the interface.
+     * @param name The name of the interface.
      */
     public void protect(ParcelFileDescriptor socket, String interfaze) throws Exception {
         PackageManager pm = mContext.getPackageManager();
@@ -298,7 +208,6 @@ public class Vpn extends BaseNetworkStateTracker {
         // Configure the interface. Abort if any of these steps fails.
         ParcelFileDescriptor tun = ParcelFileDescriptor.adoptFd(jniCreate(config.mtu));
         try {
-            updateState(DetailedState.CONNECTING, "establish");
             String interfaze = jniGetName(tun.getFd());
             if (jniSetAddresses(interfaze, config.addresses) < 1) {
                 throw new IllegalArgumentException("At least one address must be specified");
@@ -319,8 +228,11 @@ public class Vpn extends BaseNetworkStateTracker {
             mConnection = connection;
             mInterface = interfaze;
         } catch (RuntimeException e) {
-            updateState(DetailedState.FAILED, "establish");
-            IoUtils.closeQuietly(tun);
+            try {
+                tun.close();
+            } catch (Exception ex) {
+                // ignore
+            }
             throw e;
         }
         Log.i(TAG, "Established by " + config.user + " on " + mInterface);
@@ -330,80 +242,53 @@ public class Vpn extends BaseNetworkStateTracker {
         config.interfaze = mInterface;
 
         // Override DNS servers and show the notification.
-        final long token = Binder.clearCallingIdentity();
-        try {
-            mCallback.override(config.dnsServers, config.searchDomains);
-            showNotification(config, label, bitmap);
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-        // TODO: ensure that contract class eventually marks as connected
-        updateState(DetailedState.AUTHENTICATING, "establish");
+        long identity = Binder.clearCallingIdentity();
+        mCallback.override(config.dnsServers, config.searchDomains);
+        showNotification(config, label, bitmap);
+        Binder.restoreCallingIdentity(identity);
         return tun;
     }
 
-    @Deprecated
-    public synchronized void interfaceStatusChanged(String iface, boolean up) {
-        try {
-            mObserver.interfaceStatusChanged(iface, up);
-        } catch (RemoteException e) {
-            // ignored; target is local
+    // INetworkManagementEventObserver.Stub
+    @Override
+    public void interfaceAdded(String interfaze) {
+    }
+
+    // INetworkManagementEventObserver.Stub
+    @Override
+    public synchronized void interfaceStatusChanged(String interfaze, boolean up) {
+        if (!up && mLegacyVpnRunner != null) {
+            mLegacyVpnRunner.check(interfaze);
         }
     }
 
-    private INetworkManagementEventObserver mObserver = new BaseNetworkObserver() {
-        @Override
-        public void interfaceStatusChanged(String interfaze, boolean up) {
-            synchronized (Vpn.this) {
-                if (!up && mLegacyVpnRunner != null) {
-                    mLegacyVpnRunner.check(interfaze);
-                }
+    // INetworkManagementEventObserver.Stub
+    @Override
+    public void interfaceLinkStateChanged(String interfaze, boolean up) {
+    }
+
+    // INetworkManagementEventObserver.Stub
+    @Override
+    public synchronized void interfaceRemoved(String interfaze) {
+        if (interfaze.equals(mInterface) && jniCheck(interfaze) == 0) {
+            long identity = Binder.clearCallingIdentity();
+            mCallback.restore();
+            hideNotification();
+            Binder.restoreCallingIdentity(identity);
+            mInterface = null;
+            if (mConnection != null) {
+                mContext.unbindService(mConnection);
+                mConnection = null;
+            } else if (mLegacyVpnRunner != null) {
+                mLegacyVpnRunner.exit();
+                mLegacyVpnRunner = null;
             }
         }
+    }
 
-        @Override
-        public void interfaceRemoved(String interfaze) {
-            synchronized (Vpn.this) {
-                if (interfaze.equals(mInterface) && jniCheck(interfaze) == 0) {
-                    final long token = Binder.clearCallingIdentity();
-                    try {
-                        mCallback.restore();
-                        hideNotification();
-                    } finally {
-                        Binder.restoreCallingIdentity(token);
-                    }
-                    mInterface = null;
-                    if (mConnection != null) {
-                        mContext.unbindService(mConnection);
-                        mConnection = null;
-                        updateState(DetailedState.DISCONNECTED, "interfaceRemoved");
-                    } else if (mLegacyVpnRunner != null) {
-                        mLegacyVpnRunner.exit();
-                        mLegacyVpnRunner = null;
-                    }
-                }
-            }
-        }
-    };
-
-    private void enforceControlPermission() {
-        // System user is allowed to control VPN.
-        if (Binder.getCallingUid() == Process.SYSTEM_UID) {
-            return;
-        }
-
-        try {
-            // System dialogs are also allowed to control VPN.
-            PackageManager pm = mContext.getPackageManager();
-            ApplicationInfo app = pm.getApplicationInfo(VpnConfig.DIALOGS_PACKAGE, 0);
-            if (Binder.getCallingUid() == app.uid) {
-                return;
-            }
-        } catch (Exception e) {
-            // ignore
-        }
-
-        throw new SecurityException("Unauthorized Caller");
+    // INetworkManagementEventObserver.Stub
+    @Override
+    public void limitReached(String limit, String interfaze) {
     }
 
     private class Connection implements ServiceConnection {
@@ -421,9 +306,6 @@ public class Vpn extends BaseNetworkStateTracker {
     }
 
     private void showNotification(VpnConfig config, String label, Bitmap icon) {
-        if (!mEnableNotif) return;
-        mStatusIntent = VpnConfig.getIntentForStatusPanel(mContext, config);
-
         NotificationManager nm = (NotificationManager)
                 mContext.getSystemService(Context.NOTIFICATION_SERVICE);
 
@@ -439,23 +321,20 @@ public class Vpn extends BaseNetworkStateTracker {
                     .setLargeIcon(icon)
                     .setContentTitle(title)
                     .setContentText(text)
-                    .setContentIntent(mStatusIntent)
-                    .setDefaults(0)
+                    .setContentIntent(VpnConfig.getIntentForStatusPanel(mContext, config))
+                    .setDefaults(Notification.DEFAULT_ALL)
                     .setOngoing(true)
-                    .build();
-            nm.notifyAsUser(null, R.drawable.vpn_connected, notification, UserHandle.ALL);
+                    .getNotification();
+            nm.notify(R.drawable.vpn_connected, notification);
         }
     }
 
     private void hideNotification() {
-        if (!mEnableNotif) return;
-        mStatusIntent = null;
-
         NotificationManager nm = (NotificationManager)
                 mContext.getSystemService(Context.NOTIFICATION_SERVICE);
 
         if (nm != null) {
-            nm.cancelAsUser(null, R.drawable.vpn_connected, UserHandle.ALL);
+            nm.cancel(R.drawable.vpn_connected);
         }
     }
 
@@ -467,173 +346,33 @@ public class Vpn extends BaseNetworkStateTracker {
     private native int jniCheck(String interfaze);
     private native void jniProtect(int socket, String interfaze);
 
-    private static RouteInfo findIPv4DefaultRoute(LinkProperties prop) {
-        for (RouteInfo route : prop.getAllRoutes()) {
-            // Currently legacy VPN only works on IPv4.
-            if (route.isDefaultRoute() && route.getGateway() instanceof Inet4Address) {
-                return route;
-            }
-        }
-
-        throw new IllegalStateException("Unable to find IPv4 default gateway");
-    }
-
     /**
-     * Start legacy VPN, controlling native daemons as needed. Creates a
-     * secondary thread to perform connection work, returning quickly.
+     * Start legacy VPN. This method stops the daemons and restart them
+     * if arguments are not null. Heavy things are offloaded to another
+     * thread, so callers will not be blocked for a long time.
+     *
+     * @param config The parameters to configure the network.
+     * @param raoocn The arguments to be passed to racoon.
+     * @param mtpd The arguments to be passed to mtpd.
      */
-    public void startLegacyVpn(VpnProfile profile, KeyStore keyStore, LinkProperties egress) {
-        enforceControlPermission();
-        if (!keyStore.isUnlocked()) {
-            throw new IllegalStateException("KeyStore isn't unlocked");
-        }
-
-        final RouteInfo ipv4DefaultRoute = findIPv4DefaultRoute(egress);
-        final String gateway = ipv4DefaultRoute.getGateway().getHostAddress();
-        final String iface = ipv4DefaultRoute.getInterface();
-
-        // Load certificates.
-        String privateKey = "";
-        String userCert = "";
-        String caCert = "";
-        String serverCert = "";
-        if (!profile.ipsecUserCert.isEmpty()) {
-            privateKey = Credentials.USER_PRIVATE_KEY + profile.ipsecUserCert;
-            byte[] value = keyStore.get(Credentials.USER_CERTIFICATE + profile.ipsecUserCert);
-            userCert = (value == null) ? null : new String(value, StandardCharsets.UTF_8);
-        }
-        if (!profile.ipsecCaCert.isEmpty()) {
-            byte[] value = keyStore.get(Credentials.CA_CERTIFICATE + profile.ipsecCaCert);
-            caCert = (value == null) ? null : new String(value, StandardCharsets.UTF_8);
-        }
-        if (!profile.ipsecServerCert.isEmpty()) {
-            byte[] value = keyStore.get(Credentials.USER_CERTIFICATE + profile.ipsecServerCert);
-            serverCert = (value == null) ? null : new String(value, StandardCharsets.UTF_8);
-        }
-        if (privateKey == null || userCert == null || caCert == null || serverCert == null) {
-            throw new IllegalStateException("Cannot load credentials");
-        }
-
-        // Prepare arguments for racoon.
-        String[] racoon = null;
-        switch (profile.type) {
-            case VpnProfile.TYPE_L2TP_IPSEC_PSK:
-                racoon = new String[] {
-                    iface, profile.server, "udppsk", profile.ipsecIdentifier,
-                    profile.ipsecSecret, "1701",
-                };
-                break;
-            case VpnProfile.TYPE_L2TP_IPSEC_RSA:
-                racoon = new String[] {
-                    iface, profile.server, "udprsa", privateKey, userCert,
-                    caCert, serverCert, "1701",
-                };
-                break;
-            case VpnProfile.TYPE_IPSEC_XAUTH_PSK:
-                racoon = new String[] {
-                    iface, profile.server, "xauthpsk", profile.ipsecIdentifier,
-                    profile.ipsecSecret, profile.username, profile.password, "", gateway,
-                };
-                break;
-            case VpnProfile.TYPE_IPSEC_XAUTH_RSA:
-                racoon = new String[] {
-                    iface, profile.server, "xauthrsa", privateKey, userCert,
-                    caCert, serverCert, profile.username, profile.password, "", gateway,
-                };
-                break;
-            case VpnProfile.TYPE_IPSEC_HYBRID_RSA:
-                racoon = new String[] {
-                    iface, profile.server, "hybridrsa",
-                    caCert, serverCert, profile.username, profile.password, "", gateway,
-                };
-                break;
-        }
-
-        // Prepare arguments for mtpd.
-        String[] mtpd = null;
-        switch (profile.type) {
-            case VpnProfile.TYPE_PPTP:
-                mtpd = new String[] {
-                    iface, "pptp", profile.server, "1723",
-                    "name", profile.username, "password", profile.password,
-                    "linkname", "vpn", "refuse-eap", "nodefaultroute",
-                    "usepeerdns", "idle", "1800", "mtu", "1400", "mru", "1400",
-                    (profile.mppe ? "+mppe" : "nomppe"),
-                };
-                break;
-            case VpnProfile.TYPE_L2TP_IPSEC_PSK:
-            case VpnProfile.TYPE_L2TP_IPSEC_RSA:
-                mtpd = new String[] {
-                    iface, "l2tp", profile.server, "1701", profile.l2tpSecret,
-                    "name", profile.username, "password", profile.password,
-                    "linkname", "vpn", "refuse-eap", "nodefaultroute",
-                    "usepeerdns", "idle", "1800", "mtu", "1400", "mru", "1400",
-                };
-                break;
-        }
-
-        VpnConfig config = new VpnConfig();
-        config.legacy = true;
-        config.user = profile.key;
-        config.interfaze = iface;
-        config.session = profile.name;
-        config.routes = profile.routes;
-        if (!profile.dnsServers.isEmpty()) {
-            config.dnsServers = Arrays.asList(profile.dnsServers.split(" +"));
-        }
-        if (!profile.searchDomains.isEmpty()) {
-            config.searchDomains = Arrays.asList(profile.searchDomains.split(" +"));
-        }
-        startLegacyVpn(config, racoon, mtpd);
-    }
-
-    private synchronized void startLegacyVpn(VpnConfig config, String[] racoon, String[] mtpd) {
-        stopLegacyVpn();
-
+    public synchronized void startLegacyVpn(VpnConfig config, String[] racoon, String[] mtpd) {
         // Prepare for the new request. This also checks the caller.
         prepare(null, VpnConfig.LEGACY_VPN);
-        updateState(DetailedState.CONNECTING, "startLegacyVpn");
 
         // Start a new LegacyVpnRunner and we are done!
         mLegacyVpnRunner = new LegacyVpnRunner(config, racoon, mtpd);
         mLegacyVpnRunner.start();
     }
 
-    public synchronized void stopLegacyVpn() {
-        if (mLegacyVpnRunner != null) {
-            mLegacyVpnRunner.exit();
-            mLegacyVpnRunner = null;
-
-            synchronized (LegacyVpnRunner.TAG) {
-                // wait for old thread to completely finish before spinning up
-                // new instance, otherwise state updates can be out of order.
-            }
-        }
-    }
-
     /**
      * Return the information of the current ongoing legacy VPN.
      */
     public synchronized LegacyVpnInfo getLegacyVpnInfo() {
-        // Check if the caller is authorized.
-        enforceControlPermission();
-        if (mLegacyVpnRunner == null) return null;
-
-        final LegacyVpnInfo info = new LegacyVpnInfo();
-        info.key = mLegacyVpnRunner.mConfig.user;
-        info.state = LegacyVpnInfo.stateFromNetworkInfo(mNetworkInfo);
-        if (mNetworkInfo.isConnected()) {
-            info.intent = mStatusIntent;
+        // Only system user can call this method.
+        if (Binder.getCallingUid() != Process.SYSTEM_UID) {
+            throw new SecurityException("Unauthorized Caller");
         }
-        return info;
-    }
-
-    public VpnConfig getLegacyVpnConfig() {
-        if (mLegacyVpnRunner != null) {
-            return mLegacyVpnRunner.mConfig;
-        } else {
-            return null;
-        }
+        return (mLegacyVpnRunner == null) ? null : mLegacyVpnRunner.getInfo();
     }
 
     /**
@@ -651,60 +390,24 @@ public class Vpn extends BaseNetworkStateTracker {
         private final String[][] mArguments;
         private final LocalSocket[] mSockets;
         private final String mOuterInterface;
-        private final AtomicInteger mOuterConnection =
-                new AtomicInteger(ConnectivityManager.TYPE_NONE);
+        private final LegacyVpnInfo mInfo;
 
         private long mTimer = -1;
-
-        /**
-         * Watch for the outer connection (passing in the constructor) going away.
-         */
-        private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                if (!mEnableTeardown) return;
-
-                if (intent.getAction().equals(ConnectivityManager.CONNECTIVITY_ACTION)) {
-                    if (intent.getIntExtra(ConnectivityManager.EXTRA_NETWORK_TYPE,
-                            ConnectivityManager.TYPE_NONE) == mOuterConnection.get()) {
-                        NetworkInfo info = (NetworkInfo)intent.getExtra(
-                                ConnectivityManager.EXTRA_NETWORK_INFO);
-                        if (info != null && !info.isConnectedOrConnecting()) {
-                            try {
-                                mObserver.interfaceStatusChanged(mOuterInterface, false);
-                            } catch (RemoteException e) {}
-                        }
-                    }
-                }
-            }
-        };
 
         public LegacyVpnRunner(VpnConfig config, String[] racoon, String[] mtpd) {
             super(TAG);
             mConfig = config;
             mDaemons = new String[] {"racoon", "mtpd"};
-            // TODO: clear arguments from memory once launched
             mArguments = new String[][] {racoon, mtpd};
             mSockets = new LocalSocket[mDaemons.length];
+            mInfo = new LegacyVpnInfo();
 
-            // This is the interface which VPN is running on,
-            // mConfig.interfaze will change to point to OUR
-            // internal interface soon. TODO - add inner/outer to mconfig
-            // TODO - we have a race - if the outer iface goes away/disconnects before we hit this
-            // we will leave the VPN up.  We should check that it's still there/connected after 
-            // registering
+            // This is the interface which VPN is running on.
             mOuterInterface = mConfig.interfaze;
 
-            try {
-                mOuterConnection.set(
-                        mConnService.findConnectionTypeForIface(mOuterInterface));
-            } catch (Exception e) {
-                mOuterConnection.set(ConnectivityManager.TYPE_NONE);
-            }
-
-            IntentFilter filter = new IntentFilter();
-            filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
-            mContext.registerReceiver(mBroadcastReceiver, filter);
+            // Legacy VPN is not a real package, so we use it to carry the key.
+            mInfo.key = mConfig.user;
+            mConfig.user = VpnConfig.LEGACY_VPN;
         }
 
         public void check(String interfaze) {
@@ -718,12 +421,21 @@ public class Vpn extends BaseNetworkStateTracker {
             // We assume that everything is reset after stopping the daemons.
             interrupt();
             for (LocalSocket socket : mSockets) {
-                IoUtils.closeQuietly(socket);
+                try {
+                    socket.close();
+                } catch (Exception e) {
+                    // ignore
+                }
             }
-            updateState(DetailedState.DISCONNECTED, "exit");
-            try {
-                mContext.unregisterReceiver(mBroadcastReceiver);
-            } catch (IllegalArgumentException e) {}
+        }
+
+        public LegacyVpnInfo getInfo() {
+            // Update the info when VPN is disconnected.
+            if (mInfo.state == LegacyVpnInfo.STATE_CONNECTED && mInterface == null) {
+                mInfo.state = LegacyVpnInfo.STATE_DISCONNECTED;
+                mInfo.intent = null;
+            }
+            return mInfo;
         }
 
         @Override
@@ -733,7 +445,6 @@ public class Vpn extends BaseNetworkStateTracker {
             synchronized (TAG) {
                 Log.v(TAG, "Executing");
                 execute();
-                monitorDaemons();
             }
         }
 
@@ -745,21 +456,22 @@ public class Vpn extends BaseNetworkStateTracker {
             } else if (now - mTimer <= 60000) {
                 Thread.sleep(yield ? 200 : 1);
             } else {
-                updateState(DetailedState.FAILED, "checkpoint");
+                mInfo.state = LegacyVpnInfo.STATE_TIMEOUT;
                 throw new IllegalStateException("Time is up");
             }
         }
 
         private void execute() {
             // Catch all exceptions so we can clean up few things.
-            boolean initFinished = false;
             try {
                 // Initialize the timer.
                 checkpoint(false);
+                mInfo.state = LegacyVpnInfo.STATE_INITIALIZING;
 
                 // Wait for the daemons to stop.
                 for (String daemon : mDaemons) {
-                    while (!SystemService.isStopped(daemon)) {
+                    String key = "init.svc." + daemon;
+                    while (!"stopped".equals(SystemProperties.get(key, "stopped"))) {
                         checkpoint(true);
                     }
                 }
@@ -770,8 +482,6 @@ public class Vpn extends BaseNetworkStateTracker {
                 if (state.exists()) {
                     throw new IllegalStateException("Cannot delete the state");
                 }
-                new File("/data/misc/vpn/abort").delete();
-                initFinished = true;
 
                 // Check if we need to restart any of the daemons.
                 boolean restart = false;
@@ -779,10 +489,10 @@ public class Vpn extends BaseNetworkStateTracker {
                     restart = restart || (arguments != null);
                 }
                 if (!restart) {
-                    updateState(DetailedState.DISCONNECTED, "execute");
+                    mInfo.state = LegacyVpnInfo.STATE_DISCONNECTED;
                     return;
                 }
-                updateState(DetailedState.CONNECTING, "execute");
+                mInfo.state = LegacyVpnInfo.STATE_CONNECTING;
 
                 // Start the daemon with arguments.
                 for (int i = 0; i < mDaemons.length; ++i) {
@@ -793,10 +503,11 @@ public class Vpn extends BaseNetworkStateTracker {
 
                     // Start the daemon.
                     String daemon = mDaemons[i];
-                    SystemService.start(daemon);
+                    SystemProperties.set("ctl.start", daemon);
 
                     // Wait for the daemon to start.
-                    while (!SystemService.isRunning(daemon)) {
+                    String key = "init.svc." + daemon;
+                    while (!"running".equals(SystemProperties.get(key))) {
                         checkpoint(true);
                     }
 
@@ -820,7 +531,7 @@ public class Vpn extends BaseNetworkStateTracker {
                     // Send over the arguments.
                     OutputStream out = mSockets[i].getOutputStream();
                     for (String argument : arguments) {
-                        byte[] bytes = argument.getBytes(StandardCharsets.UTF_8);
+                        byte[] bytes = argument.getBytes(Charsets.UTF_8);
                         if (bytes.length >= 0xFFFF) {
                             throw new IllegalArgumentException("Argument is too large");
                         }
@@ -852,7 +563,8 @@ public class Vpn extends BaseNetworkStateTracker {
                     // Check if a running daemon is dead.
                     for (int i = 0; i < mDaemons.length; ++i) {
                         String daemon = mDaemons[i];
-                        if (mArguments[i] != null && !SystemService.isRunning(daemon)) {
+                        if (mArguments[i] != null && !"running".equals(
+                                SystemProperties.get("init.svc." + daemon))) {
                             throw new IllegalStateException(daemon + " is dead");
                         }
                     }
@@ -860,7 +572,11 @@ public class Vpn extends BaseNetworkStateTracker {
                 }
 
                 // Now we are connected. Read and parse the new state.
-                String[] parameters = FileUtils.readTextFile(state, 0, null).split("\n", -1);
+                byte[] buffer = new byte[(int) state.length()];
+                if (new FileInputStream(state).read(buffer) != buffer.length) {
+                    throw new IllegalStateException("Cannot read the state");
+                }
+                String[] parameters = new String(buffer, Charsets.UTF_8).split("\n", -1);
                 if (parameters.length != 6) {
                     throw new IllegalStateException("Cannot parse the state");
                 }
@@ -909,52 +625,25 @@ public class Vpn extends BaseNetworkStateTracker {
                     showNotification(mConfig, null, null);
 
                     Log.i(TAG, "Connected!");
-                    updateState(DetailedState.CONNECTED, "execute");
+                    mInfo.state = LegacyVpnInfo.STATE_CONNECTED;
+                    mInfo.intent = VpnConfig.getIntentForStatusPanel(mContext, null);
                 }
             } catch (Exception e) {
                 Log.i(TAG, "Aborting", e);
                 exit();
             } finally {
                 // Kill the daemons if they fail to stop.
-                if (!initFinished) {
+                if (mInfo.state == LegacyVpnInfo.STATE_INITIALIZING) {
                     for (String daemon : mDaemons) {
-                        SystemService.stop(daemon);
+                        SystemProperties.set("ctl.stop", daemon);
                     }
                 }
 
                 // Do not leave an unstable state.
-                if (!initFinished || mNetworkInfo.getDetailedState() == DetailedState.CONNECTING) {
-                    updateState(DetailedState.FAILED, "execute");
+                if (mInfo.state == LegacyVpnInfo.STATE_INITIALIZING ||
+                        mInfo.state == LegacyVpnInfo.STATE_CONNECTING) {
+                    mInfo.state = LegacyVpnInfo.STATE_FAILED;
                 }
-            }
-        }
-
-        /**
-         * Monitor the daemons we started, moving to disconnected state if the
-         * underlying services fail.
-         */
-        private void monitorDaemons() {
-            if (!mNetworkInfo.isConnected()) {
-                return;
-            }
-
-            try {
-                while (true) {
-                    Thread.sleep(2000);
-                    for (int i = 0; i < mDaemons.length; i++) {
-                        if (mArguments[i] != null && SystemService.isStopped(mDaemons[i])) {
-                            return;
-                        }
-                    }
-                }
-            } catch (InterruptedException e) {
-                Log.d(TAG, "interrupted during monitorDaemons(); stopping services");
-            } finally {
-                for (String daemon : mDaemons) {
-                    SystemService.stop(daemon);
-                }
-
-                updateState(DetailedState.DISCONNECTED, "babysit");
             }
         }
     }

@@ -27,7 +27,6 @@ int register_android_server_InputWindowHandle(JNIEnv* env);
 int register_android_server_InputManager(JNIEnv* env);
 int register_android_server_LightsService(JNIEnv* env);
 int register_android_server_PowerManagerService(JNIEnv* env);
-int register_android_server_SerialService(JNIEnv* env);
 int register_android_server_UsbDeviceManager(JNIEnv* env);
 int register_android_server_UsbHostManager(JNIEnv* env);
 int register_android_server_VibratorService(JNIEnv* env);
@@ -44,13 +43,12 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* reserved)
     jint result = -1;
 
     if (vm->GetEnv((void**) &env, JNI_VERSION_1_4) != JNI_OK) {
-        ALOGE("GetEnv failed!");
+        LOGE("GetEnv failed!");
         return result;
     }
-    ALOG_ASSERT(env, "Could not retrieve the env!");
+    LOG_ASSERT(env, "Could not retrieve the env!");
 
     register_android_server_PowerManagerService(env);
-    register_android_server_SerialService(env);
     register_android_server_InputApplicationHandle(env);
     register_android_server_InputWindowHandle(env);
     register_android_server_InputManager(env);

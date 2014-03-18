@@ -25,7 +25,6 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.ServiceManager;
 import android.os.SystemClock;
-import android.os.UserHandle;
 import android.provider.Settings;
 import android.test.AndroidTestCase;
 import android.test.suitebuilder.annotation.LargeTest;
@@ -99,7 +98,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         MyMockAccessibilityManagerClient mockClient = new MyMockAccessibilityManagerClient();
 
         // invoke the method under test
-        final int stateFlagsDisabled = mManagerService.addClient(mockClient, UserHandle.USER_OWNER);
+        final int stateFlagsDisabled = mManagerService.addClient(mockClient);
         boolean enabledAccessibilityDisabled =
             (stateFlagsDisabled & AccessibilityManager.STATE_FLAG_ACCESSIBILITY_ENABLED) != 0;
 
@@ -111,7 +110,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         ensureAccessibilityEnabled(mContext, true);
 
         // invoke the method under test
-        final int stateFlagsEnabled = mManagerService.addClient(mockClient, UserHandle.USER_OWNER);
+        final int stateFlagsEnabled = mManagerService.addClient(mockClient);
         boolean enabledAccessibilityEnabled =
             (stateFlagsEnabled & AccessibilityManager.STATE_FLAG_ACCESSIBILITY_ENABLED) != 0;
 
@@ -130,7 +129,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         MyMockAccessibilityManagerClient mockClient = new MyMockAccessibilityManagerClient();
 
         // invoke the method under test
-        final int stateFlagsEnabled = mManagerService.addClient(mockClient, UserHandle.USER_OWNER);
+        final int stateFlagsEnabled = mManagerService.addClient(mockClient);
         boolean enabledAccessibilityEnabled =
             (stateFlagsEnabled & AccessibilityManager.STATE_FLAG_ACCESSIBILITY_ENABLED) != 0;
 
@@ -142,7 +141,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         ensureAccessibilityEnabled(mContext, false);
 
         // invoke the method under test
-        final int stateFlagsDisabled = mManagerService.addClient(mockClient, UserHandle.USER_OWNER);
+        final int stateFlagsDisabled = mManagerService.addClient(mockClient);
         boolean enabledAccessibilityDisabled =
             (stateFlagsDisabled & AccessibilityManager.STATE_FLAG_ACCESSIBILITY_ENABLED) != 0;
 
@@ -161,8 +160,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         String secondMockServiceClassName = MySecondMockAccessibilityService.class.getName();
 
         // look for the two mock services
-        for (AccessibilityServiceInfo info : mManagerService.getInstalledAccessibilityServiceList(
-                UserHandle.USER_OWNER)) {
+        for (AccessibilityServiceInfo info : mManagerService.getInstalledAccessibilityServiceList()) {
             ServiceInfo serviceInfo = info.getResolveInfo().serviceInfo;
             if (packageName.equals(serviceInfo.packageName)) {
                 if (firstMockServiceClassName.equals(serviceInfo.name)) {
@@ -203,7 +201,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         service.replay();
 
         // send the event
-        mManagerService.sendAccessibilityEvent(sentEvent, UserHandle.USER_OWNER);
+        mManagerService.sendAccessibilityEvent(sentEvent);
 
         // verify if all expected methods have been called
         assertMockServiceVerifiedWithinTimeout(service);
@@ -233,7 +231,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         service.replay();
 
         // send the event
-        mManagerService.sendAccessibilityEvent(sentEvent, UserHandle.USER_OWNER);
+        mManagerService.sendAccessibilityEvent(sentEvent);
 
         // verify if all expected methods have been called
         assertMockServiceVerifiedWithinTimeout(service);
@@ -263,7 +261,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         service.replay();
 
         // send the event
-        mManagerService.sendAccessibilityEvent(sentEvent, UserHandle.USER_OWNER);
+        mManagerService.sendAccessibilityEvent(sentEvent);
 
         // verify if all expected methods have been called
         assertMockServiceVerifiedWithinTimeout(service);
@@ -299,8 +297,8 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         service.replay();
 
         // send the events
-        mManagerService.sendAccessibilityEvent(firstEvent, UserHandle.USER_OWNER);
-        mManagerService.sendAccessibilityEvent(secondEvent, UserHandle.USER_OWNER);
+        mManagerService.sendAccessibilityEvent(firstEvent);
+        mManagerService.sendAccessibilityEvent(secondEvent);
 
         // wait for #sendAccessibilityEvent to reach the backing service
         Thread.sleep(TIMEOUT_BINDER_CALL);
@@ -356,7 +354,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         secondService.replay();
 
         // send the event
-        mManagerService.sendAccessibilityEvent(sentEvent, UserHandle.USER_OWNER);
+        mManagerService.sendAccessibilityEvent(sentEvent);
 
         // verify if all expected methods have been called
         assertMockServiceVerifiedWithinTimeout(firstService);
@@ -395,7 +393,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         secondService.replay();
 
         // send the event
-        mManagerService.sendAccessibilityEvent(sentEvent, UserHandle.USER_OWNER);
+        mManagerService.sendAccessibilityEvent(sentEvent);
 
         // verify if all expected methods have been called
         assertMockServiceVerifiedWithinTimeout(firstService);
@@ -436,7 +434,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         secondService.replay();
 
         // send the event
-        mManagerService.sendAccessibilityEvent(sentEvent, UserHandle.USER_OWNER);
+        mManagerService.sendAccessibilityEvent(sentEvent);
 
         // verify if all expected methods have been called
         assertMockServiceVerifiedWithinTimeout(firstService);
@@ -479,7 +477,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         secondService.replay();
 
         // send the event
-        mManagerService.sendAccessibilityEvent(sentEvent, UserHandle.USER_OWNER);
+        mManagerService.sendAccessibilityEvent(sentEvent);
 
         // verify if all expected methods have been called
         assertMockServiceVerifiedWithinTimeout(firstService);
@@ -514,7 +512,7 @@ public class AccessibilityManagerServiceTest extends AndroidTestCase {
         secondService.replay();
 
         // call the method under test
-        mManagerService.interrupt(UserHandle.USER_OWNER);
+        mManagerService.interrupt();
 
         // verify if all expected methods have been called
         assertMockServiceVerifiedWithinTimeout(firstService);

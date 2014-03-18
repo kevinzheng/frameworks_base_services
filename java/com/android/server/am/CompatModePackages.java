@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 
@@ -11,6 +12,7 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
 
+import com.android.internal.os.AtomicFile;
 import com.android.internal.util.FastXmlSerializer;
 
 import android.app.ActivityManager;
@@ -22,7 +24,6 @@ import android.content.res.CompatibilityInfo;
 import android.os.Handler;
 import android.os.Message;
 import android.os.RemoteException;
-import android.util.AtomicFile;
 import android.util.Slog;
 import android.util.Xml;
 
@@ -40,7 +41,7 @@ public class CompatModePackages {
 
     private final HashMap<String, Integer> mPackages = new HashMap<String, Integer>();
 
-    private static final int MSG_WRITE = ActivityManagerService.FIRST_COMPAT_MODE_MSG;
+    private static final int MSG_WRITE = 1;
 
     private final Handler mHandler = new Handler() {
         @Override public void handleMessage(Message msg) {
@@ -120,7 +121,7 @@ public class CompatModePackages {
     public void handlePackageAddedLocked(String packageName, boolean updated) {
         ApplicationInfo ai = null;
         try {
-            ai = AppGlobals.getPackageManager().getApplicationInfo(packageName, 0, 0);
+            ai = AppGlobals.getPackageManager().getApplicationInfo(packageName, 0);
         } catch (RemoteException e) {
         }
         if (ai == null) {
@@ -219,7 +220,7 @@ public class CompatModePackages {
     public int getPackageScreenCompatModeLocked(String packageName) {
         ApplicationInfo ai = null;
         try {
-            ai = AppGlobals.getPackageManager().getApplicationInfo(packageName, 0, 0);
+            ai = AppGlobals.getPackageManager().getApplicationInfo(packageName, 0);
         } catch (RemoteException e) {
         }
         if (ai == null) {
@@ -231,7 +232,7 @@ public class CompatModePackages {
     public void setPackageScreenCompatModeLocked(String packageName, int mode) {
         ApplicationInfo ai = null;
         try {
-            ai = AppGlobals.getPackageManager().getApplicationInfo(packageName, 0, 0);
+            ai = AppGlobals.getPackageManager().getApplicationInfo(packageName, 0);
         } catch (RemoteException e) {
         }
         if (ai == null) {
@@ -364,7 +365,7 @@ public class CompatModePackages {
                 }
                 ApplicationInfo ai = null;
                 try {
-                    ai = pm.getApplicationInfo(pkg, 0, 0);
+                    ai = pm.getApplicationInfo(pkg, 0);
                 } catch (RemoteException e) {
                 }
                 if (ai == null) {

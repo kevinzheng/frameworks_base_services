@@ -16,17 +16,10 @@
 
 package com.android.server.wm;
 
-import com.android.server.input.InputManagerService;
-import com.android.server.input.InputApplicationHandle;
-import com.android.server.input.InputWindowHandle;
-import com.android.server.wm.WindowManagerService.AllWindowsIterator;
-
-import android.app.ActivityManagerNative;
 import android.graphics.Rect;
 import android.os.RemoteException;
 import android.util.Log;
 import android.util.Slog;
-import android.view.Display;
 import android.view.InputChannel;
 import android.view.KeyEvent;
 import android.view.WindowManager;
@@ -34,7 +27,7 @@ import android.view.WindowManager;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
+final class InputMonitor {
     private final WindowManagerService mService;
     
     // Current window with input focus for keys and other non-touch events.  May be null.
@@ -44,9 +37,7 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
     private boolean mInputDispatchFrozen;
     
     // When true, input dispatch proceeds normally.  Otherwise all events are dropped.
-    // Initially false, so that input does not get dispatched until boot is finished at
-    // which point the ActivityManager will enable dispatching.
-    private boolean mInputDispatchEnabled;
+    private boolean mInputDispatchEnabled = true;
 
     // When true, need to call updateInputWindowsLw().
     private boolean mUpdateInputWindowsNeeded = true;
@@ -90,36 +81,24 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
     public long notifyANR(InputApplicationHandle inputApplicationHandle,
             InputWindowHandle inputWindowHandle) {
         AppWindowToken appWindowToken = null;
-        WindowState windowState = null;
-        boolean aboveSystem = false;
-        synchronized (mService.mWindowMap) {
-            if (inputWindowHandle != null) {
-                windowState = (WindowState) inputWindowHandle.windowState;
+        if (inputWindowHandle != null) {
+            synchronized (mService.mWindowMap) {
+                WindowState windowState = (WindowState) inputWindowHandle.windowState;
                 if (windowState != null) {
+                    Slog.i(WindowManagerService.TAG, "Input event dispatching timed out sending to "
+                            + windowState.mAttrs.getTitle());
                     appWindowToken = windowState.mAppToken;
                 }
             }
-            if (appWindowToken == null && inputApplicationHandle != null) {
-                appWindowToken = (AppWindowToken)inputApplicationHandle.appWindowToken;
+        }
+        
+        if (appWindowToken == null && inputApplicationHandle != null) {
+            appWindowToken = inputApplicationHandle.appWindowToken;
+            if (appWindowToken != null) {
+                Slog.i(WindowManagerService.TAG,
+                        "Input event dispatching timed out sending to application "
+                                + appWindowToken.stringName);
             }
-
-            if (windowState != null) {
-                Slog.i(WindowManagerService.TAG, "Input event dispatching timed out "
-                        + "sending to " + windowState.mAttrs.getTitle());
-                // Figure out whether this window is layered above system windows.
-                // We need to do this here to help the activity manager know how to
-                // layer its ANR dialog.
-                int systemAlertLayer = mService.mPolicy.windowTypeToLayerLw(
-                        WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
-                aboveSystem = windowState.mBaseLayer > systemAlertLayer;
-            } else if (appWindowToken != null) {
-                Slog.i(WindowManagerService.TAG, "Input event dispatching timed out "
-                        + "sending to application " + appWindowToken.stringName);
-            } else {
-                Slog.i(WindowManagerService.TAG, "Input event dispatching timed out.");
-            }
-
-            mService.saveANRStateLocked(appWindowToken, windowState);
         }
 
         if (appWindowToken != null && appWindowToken.appToken != null) {
@@ -134,24 +113,11 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
                 }
             } catch (RemoteException ex) {
             }
-        } else if (windowState != null) {
-            try {
-                // Notify the activity manager about the timeout and let it decide whether
-                // to abort dispatching or keep waiting.
-                long timeout = ActivityManagerNative.getDefault().inputDispatchingTimedOut(
-                        windowState.mSession.mPid, aboveSystem);
-                if (timeout >= 0) {
-                    // The activity manager declined to abort dispatching.
-                    // Wait a bit longer and timeout again later.
-                    return timeout;
-                }
-            } catch (RemoteException ex) {
-            }
         }
         return 0; // abort dispatching
     }
 
-    private void addInputWindowHandleLw(final InputWindowHandle windowHandle) {
+    private void addInputWindowHandleLw(InputWindowHandle windowHandle) {
         if (mInputWindowHandles == null) {
             mInputWindowHandles = new InputWindowHandle[16];
         }
@@ -160,44 +126,6 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
                     mInputWindowHandleCount * 2);
         }
         mInputWindowHandles[mInputWindowHandleCount++] = windowHandle;
-    }
-
-    private void addInputWindowHandleLw(final InputWindowHandle inputWindowHandle,
-            final WindowState child, final int flags, final int type,
-            final boolean isVisible, final boolean hasFocus, final boolean hasWallpaper) {
-        // Add a window to our list of input windows.
-        inputWindowHandle.name = child.toString();
-        inputWindowHandle.layoutParamsFlags = flags;
-        inputWindowHandle.layoutParamsType = type;
-        inputWindowHandle.dispatchingTimeoutNanos = child.getInputDispatchingTimeoutNanos();
-        inputWindowHandle.visible = isVisible;
-        inputWindowHandle.canReceiveKeys = child.canReceiveKeys();
-        inputWindowHandle.hasFocus = hasFocus;
-        inputWindowHandle.hasWallpaper = hasWallpaper;
-        inputWindowHandle.paused = child.mAppToken != null ? child.mAppToken.paused : false;
-        inputWindowHandle.layer = child.mLayer;
-        inputWindowHandle.ownerPid = child.mSession.mPid;
-        inputWindowHandle.ownerUid = child.mSession.mUid;
-        inputWindowHandle.inputFeatures = child.mAttrs.inputFeatures;
-
-        final Rect frame = child.mFrame;
-        inputWindowHandle.frameLeft = frame.left;
-        inputWindowHandle.frameTop = frame.top;
-        inputWindowHandle.frameRight = frame.right;
-        inputWindowHandle.frameBottom = frame.bottom;
-
-        if (child.mGlobalScale != 1) {
-            // If we are scaling the window, input coordinates need
-            // to be inversely scaled to map from what is on screen
-            // to what is actually being touched in the UI.
-            inputWindowHandle.scaleFactor = 1.0f/child.mGlobalScale;
-        } else {
-            inputWindowHandle.scaleFactor = 1;
-        }
-
-        child.getTouchableRegion(inputWindowHandle.touchableRegion);
-
-        addInputWindowHandleLw(inputWindowHandle);
     }
 
     private void clearInputWindowHandlesLw() {
@@ -224,9 +152,7 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
         // As an optimization, we could try to prune the list of windows but this turns
         // out to be difficult because only the native code knows for sure which window
         // currently has touch focus.
-        final WindowStateAnimator universeBackground = mService.mAnimator.mUniverseBackground;
-        final int aboveUniverseLayer = mService.mAnimator.mAboveUniverseLayer;
-        boolean addedUniverse = false;
+        final ArrayList<WindowState> windows = mService.mWindows;
 
         // If there's a drag in flight, provide a pseudowindow to catch drag input
         final boolean inDrag = (mService.mDragState != null);
@@ -248,11 +174,9 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
             addInputWindowHandleLw(mService.mFakeWindows.get(i).mWindowHandle);
         }
 
-        // Add all windows on the default display.
-        final AllWindowsIterator iterator = mService.new AllWindowsIterator(
-                WindowManagerService.REVERSE_ITERATOR);
-        while (iterator.hasNext()) {
-            final WindowState child = iterator.next();
+        final int N = windows.size();
+        for (int i = N - 1; i >= 0; i--) {
+            final WindowState child = windows.get(i);
             final InputChannel inputChannel = child.mInputChannel;
             final InputWindowHandle inputWindowHandle = child.mInputWindowHandle;
             if (inputChannel == null || inputWindowHandle == null || child.mRemoved) {
@@ -267,28 +191,46 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
             final boolean isVisible = child.isVisibleLw();
             final boolean hasWallpaper = (child == mService.mWallpaperTarget)
                     && (type != WindowManager.LayoutParams.TYPE_KEYGUARD);
-            final boolean onDefaultDisplay = (child.getDisplayId() == Display.DEFAULT_DISPLAY);
 
             // If there's a drag in progress and 'child' is a potential drop target,
             // make sure it's been told about the drag
-            if (inDrag && isVisible && onDefaultDisplay) {
+            if (inDrag && isVisible) {
                 mService.mDragState.sendDragStartedIfNeededLw(child);
             }
 
-            if (universeBackground != null && !addedUniverse
-                    && child.mBaseLayer < aboveUniverseLayer && onDefaultDisplay) {
-                final WindowState u = universeBackground.mWin;
-                if (u.mInputChannel != null && u.mInputWindowHandle != null) {
-                    addInputWindowHandleLw(u.mInputWindowHandle, u, u.mAttrs.flags,
-                            u.mAttrs.type, true, u == mInputFocus, false);
-                }
-                addedUniverse = true;
+            // Add a window to our list of input windows.
+            inputWindowHandle.name = child.toString();
+            inputWindowHandle.layoutParamsFlags = flags;
+            inputWindowHandle.layoutParamsType = type;
+            inputWindowHandle.dispatchingTimeoutNanos = child.getInputDispatchingTimeoutNanos();
+            inputWindowHandle.visible = isVisible;
+            inputWindowHandle.canReceiveKeys = child.canReceiveKeys();
+            inputWindowHandle.hasFocus = hasFocus;
+            inputWindowHandle.hasWallpaper = hasWallpaper;
+            inputWindowHandle.paused = child.mAppToken != null ? child.mAppToken.paused : false;
+            inputWindowHandle.layer = child.mLayer;
+            inputWindowHandle.ownerPid = child.mSession.mPid;
+            inputWindowHandle.ownerUid = child.mSession.mUid;
+            inputWindowHandle.inputFeatures = child.mAttrs.inputFeatures;
+
+            final Rect frame = child.mFrame;
+            inputWindowHandle.frameLeft = frame.left;
+            inputWindowHandle.frameTop = frame.top;
+            inputWindowHandle.frameRight = frame.right;
+            inputWindowHandle.frameBottom = frame.bottom;
+
+            if (child.mGlobalScale != 1) {
+                // If we are scaling the window, input coordinates need
+                // to be inversely scaled to map from what is on screen
+                // to what is actually being touched in the UI.
+                inputWindowHandle.scaleFactor = 1.0f/child.mGlobalScale;
+            } else {
+                inputWindowHandle.scaleFactor = 1;
             }
 
-            if (child.mWinAnimator != universeBackground) {
-                addInputWindowHandleLw(inputWindowHandle, child, flags, type,
-                        isVisible, hasFocus, hasWallpaper);
-            }
+            child.getTouchableRegion(inputWindowHandle.touchableRegion);
+
+            addInputWindowHandleLw(inputWindowHandle);
         }
 
         // Send windows to native code.
@@ -359,14 +301,7 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
         WindowState windowState = focus != null ? (WindowState) focus.windowState : null;
         return mService.mPolicy.dispatchUnhandledKey(windowState, event, policyFlags);
     }
-
-    /* Callback to get pointer layer. */
-    public int getPointerLayer() {
-        return mService.mPolicy.windowTypeToLayerLw(WindowManager.LayoutParams.TYPE_POINTER)
-                * WindowManagerService.TYPE_LAYER_MULTIPLIER
-                + WindowManagerService.TYPE_LAYER_OFFSET;
-    }
-
+    
     /* Called when the current input focus changes.
      * Layer assignment is assumed to be complete by the time this is called.
      */

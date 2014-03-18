@@ -22,61 +22,59 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
 import android.os.SystemClock;
-import android.util.LocalLog;
 import android.util.Slog;
 
-import com.android.internal.annotations.VisibleForTesting;
-import com.google.android.collect.Lists;
-
-import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.LinkedList;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
- * Generic connector class for interfacing with a native daemon which uses the
- * {@code libsysutils} FrameworkListener protocol.
+ * Generic connector class for interfacing with a native
+ * daemon which uses the libsysutils FrameworkListener
+ * protocol.
  */
 final class NativeDaemonConnector implements Runnable, Handler.Callback, Watchdog.Monitor {
-    private static final boolean LOGD = false;
+    private static final boolean LOCAL_LOGD = false;
 
-    private final String TAG;
-
-    private String mSocket;
-    private OutputStream mOutputStream;
-    private LocalLog mLocalLog;
-
-    private final ResponseQueue mResponseQueue;
-
+    private BlockingQueue<String> mResponseQueue;
+    private OutputStream          mOutputStream;
+    private String                TAG = "NativeDaemonConnector";
+    private String                mSocket;
     private INativeDaemonConnectorCallbacks mCallbacks;
-    private Handler mCallbackHandler;
-
-    private AtomicInteger mSequenceNumber;
-
-    private static final int DEFAULT_TIMEOUT = 1 * 60 * 1000; /* 1 minute */
-    private static final long WARN_EXECUTE_DELAY_MS = 500; /* .5 sec */
+    private Handler               mCallbackHandler;
 
     /** Lock held whenever communicating with native daemon. */
-    private final Object mDaemonLock = new Object();
+    private Object mDaemonLock = new Object();
 
     private final int BUFFER_SIZE = 4096;
 
-    NativeDaemonConnector(INativeDaemonConnectorCallbacks callbacks, String socket,
-            int responseQueueSize, String logTag, int maxLogSize) {
+    class ResponseCode {
+        public static final int ActionInitiated                = 100;
+
+        public static final int CommandOkay                    = 200;
+
+        // The range of 400 -> 599 is reserved for cmd failures
+        public static final int OperationFailed                = 400;
+        public static final int CommandSyntaxError             = 500;
+        public static final int CommandParameterError          = 501;
+
+        public static final int UnsolicitedInformational       = 600;
+
+        //
+        public static final int FailedRangeStart               = 400;
+        public static final int FailedRangeEnd                 = 599;
+    }
+
+    NativeDaemonConnector(INativeDaemonConnectorCallbacks callbacks,
+                          String socket, int responseQueueSize, String logTag) {
         mCallbacks = callbacks;
+        if (logTag != null)
+            TAG = logTag;
         mSocket = socket;
-        mResponseQueue = new ResponseQueue(responseQueueSize);
-        mSequenceNumber = new AtomicInteger(0);
-        TAG = logTag != null ? logTag : "NativeDaemonConnector";
-        mLocalLog = new LocalLog(maxLogSize);
+        mResponseQueue = new LinkedBlockingQueue<String>(responseQueueSize);
     }
 
     @Override
@@ -89,7 +87,7 @@ final class NativeDaemonConnector implements Runnable, Handler.Callback, Watchdo
             try {
                 listenToSocket();
             } catch (Exception e) {
-                loge("Error in NativeDaemonConnector: " + e);
+                Slog.e(TAG, "Error in NativeDaemonConnector", e);
                 SystemClock.sleep(5000);
             }
         }
@@ -99,11 +97,13 @@ final class NativeDaemonConnector implements Runnable, Handler.Callback, Watchdo
     public boolean handleMessage(Message msg) {
         String event = (String) msg.obj;
         try {
-            if (!mCallbacks.onEvent(msg.what, event, NativeDaemonEvent.unescapeArgs(event))) {
-                log(String.format("Unhandled event '%s'", event));
+            if (!mCallbacks.onEvent(msg.what, event, event.split(" "))) {
+                Slog.w(TAG, String.format(
+                        "Unhandled event '%s'", event));
             }
         } catch (Exception e) {
-            loge("Error handling '" + event + "': " + e);
+            Slog.e(TAG, String.format(
+                    "Error handling '%s'", event), e);
         }
         return true;
     }
@@ -119,9 +119,7 @@ final class NativeDaemonConnector implements Runnable, Handler.Callback, Watchdo
             socket.connect(address);
 
             InputStream inputStream = socket.getInputStream();
-            synchronized (mDaemonLock) {
-                mOutputStream = socket.getOutputStream();
-            }
+            mOutputStream = socket.getOutputStream();
 
             mCallbacks.onDaemonConnected();
 
@@ -130,10 +128,7 @@ final class NativeDaemonConnector implements Runnable, Handler.Callback, Watchdo
 
             while (true) {
                 int count = inputStream.read(buffer, start, BUFFER_SIZE - start);
-                if (count < 0) {
-                    loge("got " + count + " reading with start = " + start);
-                    break;
-                }
+                if (count < 0) break;
 
                 // Add our starting point to the count and reset the start.
                 count += start;
@@ -141,30 +136,28 @@ final class NativeDaemonConnector implements Runnable, Handler.Callback, Watchdo
 
                 for (int i = 0; i < count; i++) {
                     if (buffer[i] == 0) {
-                        final String rawEvent = new String(
-                                buffer, start, i - start, StandardCharsets.UTF_8);
-                        log("RCV <- {" + rawEvent + "}");
+                        String event = new String(buffer, start, i - start);
+                        if (LOCAL_LOGD) Slog.d(TAG, String.format("RCV <- {%s}", event));
 
+                        String[] tokens = event.split(" ", 2);
                         try {
-                            final NativeDaemonEvent event = NativeDaemonEvent.parseRawEvent(
-                                    rawEvent);
-                            if (event.isClassUnsolicited()) {
-                                // TODO: migrate to sending NativeDaemonEvent instances
-                                mCallbackHandler.sendMessage(mCallbackHandler.obtainMessage(
-                                        event.getCode(), event.getRawEvent()));
-                            } else {
-                                mResponseQueue.add(event.getCmdNumber(), event);
-                            }
-                        } catch (IllegalArgumentException e) {
-                            log("Problem parsing message: " + rawEvent + " - " + e);
-                        }
+                            int code = Integer.parseInt(tokens[0]);
 
+                            if (code >= ResponseCode.UnsolicitedInformational) {
+                                mCallbackHandler.sendMessage(
+                                        mCallbackHandler.obtainMessage(code, event));
+                            } else {
+                                try {
+                                    mResponseQueue.put(event);
+                                } catch (InterruptedException ex) {
+                                    Slog.e(TAG, "Failed to put response onto queue", ex);
+                                }
+                            }
+                        } catch (NumberFormatException nfe) {
+                            Slog.w(TAG, String.format("Bad msg (%s)", event));
+                        }
                         start = i + 1;
                     }
-                }
-                if (start == 0) {
-                    final String rawEvent = new String(buffer, start, count, StandardCharsets.UTF_8);
-                    log("RCV incomplete <- {" + rawEvent + "}");
                 }
 
                 // We should end at the amount we read. If not, compact then
@@ -178,16 +171,15 @@ final class NativeDaemonConnector implements Runnable, Handler.Callback, Watchdo
                 }
             }
         } catch (IOException ex) {
-            loge("Communications error: " + ex);
+            Slog.e(TAG, "Communications error", ex);
             throw ex;
         } finally {
             synchronized (mDaemonLock) {
                 if (mOutputStream != null) {
                     try {
-                        loge("closing stream for " + mSocket);
                         mOutputStream.close();
                     } catch (IOException e) {
-                        loge("Failed closing output stream: " + e);
+                        Slog.w(TAG, "Failed closing output stream", e);
                     }
                     mOutputStream = null;
                 }
@@ -198,392 +190,142 @@ final class NativeDaemonConnector implements Runnable, Handler.Callback, Watchdo
                     socket.close();
                 }
             } catch (IOException ex) {
-                loge("Failed closing socket: " + ex);
+                Slog.w(TAG, "Failed closing socket", ex);
+            }
+        }
+    }
+
+    private void sendCommandLocked(String command) throws NativeDaemonConnectorException {
+        sendCommandLocked(command, null);
+    }
+
+    /**
+     * Sends a command to the daemon with a single argument
+     *
+     * @param command  The command to send to the daemon
+     * @param argument The argument to send with the command (or null)
+     */
+    private void sendCommandLocked(String command, String argument)
+            throws NativeDaemonConnectorException {
+        if (command != null && command.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException("unexpected command: " + command);
+        }
+        if (argument != null && argument.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException("unexpected argument: " + argument);
+        }
+
+        if (LOCAL_LOGD) Slog.d(TAG, String.format("SND -> {%s} {%s}", command, argument));
+        if (mOutputStream == null) {
+            Slog.e(TAG, "No connection to daemon", new IllegalStateException());
+            throw new NativeDaemonConnectorException("No output stream!");
+        } else {
+            StringBuilder builder = new StringBuilder(command);
+            if (argument != null) {
+                builder.append(argument);
+            }
+            builder.append('\0');
+
+            try {
+                mOutputStream.write(builder.toString().getBytes());
+            } catch (IOException ex) {
+                Slog.e(TAG, "IOException in sendCommand", ex);
             }
         }
     }
 
     /**
-     * Wrapper around argument that indicates it's sensitive and shouldn't be
-     * logged.
+     * Issue a command to the native daemon and return the responses
      */
-    public static class SensitiveArg {
-        private final Object mArg;
-
-        public SensitiveArg(Object arg) {
-            mArg = arg;
-        }
-
-        @Override
-        public String toString() {
-            return String.valueOf(mArg);
-        }
-    }
-
-    /**
-     * Make command for daemon, escaping arguments as needed.
-     */
-    @VisibleForTesting
-    static void makeCommand(StringBuilder rawBuilder, StringBuilder logBuilder, int sequenceNumber,
-            String cmd, Object... args) {
-        if (cmd.indexOf('\0') >= 0) {
-            throw new IllegalArgumentException("Unexpected command: " + cmd);
-        }
-        if (cmd.indexOf(' ') >= 0) {
-            throw new IllegalArgumentException("Arguments must be separate from command");
-        }
-
-        rawBuilder.append(sequenceNumber).append(' ').append(cmd);
-        logBuilder.append(sequenceNumber).append(' ').append(cmd);
-        for (Object arg : args) {
-            final String argString = String.valueOf(arg);
-            if (argString.indexOf('\0') >= 0) {
-                throw new IllegalArgumentException("Unexpected argument: " + arg);
-            }
-
-            rawBuilder.append(' ');
-            logBuilder.append(' ');
-
-            appendEscaped(rawBuilder, argString);
-            if (arg instanceof SensitiveArg) {
-                logBuilder.append("[scrubbed]");
-            } else {
-                appendEscaped(logBuilder, argString);
-            }
-        }
-
-        rawBuilder.append('\0');
-    }
-
-    /**
-     * Issue the given command to the native daemon and return a single expected
-     * response.
-     *
-     * @throws NativeDaemonConnectorException when problem communicating with
-     *             native daemon, or if the response matches
-     *             {@link NativeDaemonEvent#isClassClientError()} or
-     *             {@link NativeDaemonEvent#isClassServerError()}.
-     */
-    public NativeDaemonEvent execute(Command cmd) throws NativeDaemonConnectorException {
-        return execute(cmd.mCmd, cmd.mArguments.toArray());
-    }
-
-    /**
-     * Issue the given command to the native daemon and return a single expected
-     * response. Any arguments must be separated from base command so they can
-     * be properly escaped.
-     *
-     * @throws NativeDaemonConnectorException when problem communicating with
-     *             native daemon, or if the response matches
-     *             {@link NativeDaemonEvent#isClassClientError()} or
-     *             {@link NativeDaemonEvent#isClassServerError()}.
-     */
-    public NativeDaemonEvent execute(String cmd, Object... args)
-            throws NativeDaemonConnectorException {
-        final NativeDaemonEvent[] events = executeForList(cmd, args);
-        if (events.length != 1) {
-            throw new NativeDaemonConnectorException(
-                    "Expected exactly one response, but received " + events.length);
-        }
-        return events[0];
-    }
-
-    /**
-     * Issue the given command to the native daemon and return any
-     * {@link NativeDaemonEvent#isClassContinue()} responses, including the
-     * final terminal response.
-     *
-     * @throws NativeDaemonConnectorException when problem communicating with
-     *             native daemon, or if the response matches
-     *             {@link NativeDaemonEvent#isClassClientError()} or
-     *             {@link NativeDaemonEvent#isClassServerError()}.
-     */
-    public NativeDaemonEvent[] executeForList(Command cmd) throws NativeDaemonConnectorException {
-        return executeForList(cmd.mCmd, cmd.mArguments.toArray());
-    }
-
-    /**
-     * Issue the given command to the native daemon and return any
-     * {@link NativeDaemonEvent#isClassContinue()} responses, including the
-     * final terminal response. Any arguments must be separated from base
-     * command so they can be properly escaped.
-     *
-     * @throws NativeDaemonConnectorException when problem communicating with
-     *             native daemon, or if the response matches
-     *             {@link NativeDaemonEvent#isClassClientError()} or
-     *             {@link NativeDaemonEvent#isClassServerError()}.
-     */
-    public NativeDaemonEvent[] executeForList(String cmd, Object... args)
-            throws NativeDaemonConnectorException {
-            return execute(DEFAULT_TIMEOUT, cmd, args);
-    }
-
-    /**
-     * Issue the given command to the native daemon and return any {@linke
-     * NativeDaemonEvent@isClassContinue()} responses, including the final
-     * terminal response. Note that the timeout does not count time in deep
-     * sleep. Any arguments must be separated from base command so they can be
-     * properly escaped.
-     *
-     * @throws NativeDaemonConnectorException when problem communicating with
-     *             native daemon, or if the response matches
-     *             {@link NativeDaemonEvent#isClassClientError()} or
-     *             {@link NativeDaemonEvent#isClassServerError()}.
-     */
-    public NativeDaemonEvent[] execute(int timeout, String cmd, Object... args)
-            throws NativeDaemonConnectorException {
-        final long startTime = SystemClock.elapsedRealtime();
-
-        final ArrayList<NativeDaemonEvent> events = Lists.newArrayList();
-
-        final StringBuilder rawBuilder = new StringBuilder();
-        final StringBuilder logBuilder = new StringBuilder();
-        final int sequenceNumber = mSequenceNumber.incrementAndGet();
-
-        makeCommand(rawBuilder, logBuilder, sequenceNumber, cmd, args);
-
-        final String rawCmd = rawBuilder.toString();
-        final String logCmd = logBuilder.toString();
-
-        log("SND -> {" + logCmd + "}");
-
+    public ArrayList<String> doCommand(String cmd) throws NativeDaemonConnectorException {
         synchronized (mDaemonLock) {
-            if (mOutputStream == null) {
-                throw new NativeDaemonConnectorException("missing output stream");
-            } else {
+            return doCommandLocked(cmd);
+        }
+    }
+
+    private ArrayList<String> doCommandLocked(String cmd) throws NativeDaemonConnectorException {
+        mResponseQueue.clear();
+        sendCommandLocked(cmd);
+
+        ArrayList<String> response = new ArrayList<String>();
+        boolean complete = false;
+        int code = -1;
+
+        while (!complete) {
+            try {
+                // TODO - this should not block forever
+                String line = mResponseQueue.take();
+                if (LOCAL_LOGD) Slog.d(TAG, String.format("RSP <- {%s}", line));
+                String[] tokens = line.split(" ");
                 try {
-                    mOutputStream.write(rawCmd.getBytes(StandardCharsets.UTF_8));
-                } catch (IOException e) {
-                    throw new NativeDaemonConnectorException("problem sending command", e);
+                    code = Integer.parseInt(tokens[0]);
+                } catch (NumberFormatException nfe) {
+                    throw new NativeDaemonConnectorException(
+                            String.format("Invalid response from daemon (%s)", line));
                 }
+
+                if ((code >= 200) && (code < 600)) {
+                    complete = true;
+                }
+                response.add(line);
+            } catch (InterruptedException ex) {
+                Slog.e(TAG, "Failed to process response", ex);
             }
         }
 
-        NativeDaemonEvent event = null;
-        do {
-            event = mResponseQueue.remove(sequenceNumber, timeout, logCmd);
-            if (event == null) {
-                loge("timed-out waiting for response to " + logCmd);
-                throw new NativeDaemonFailureException(logCmd, event);
-            }
-            log("RMV <- {" + event + "}");
-            events.add(event);
-        } while (event.isClassContinue());
-
-        final long endTime = SystemClock.elapsedRealtime();
-        if (endTime - startTime > WARN_EXECUTE_DELAY_MS) {
-            loge("NDC Command {" + logCmd + "} took too long (" + (endTime - startTime) + "ms)");
+        if (code >= ResponseCode.FailedRangeStart &&
+                code <= ResponseCode.FailedRangeEnd) {
+            /*
+             * Note: The format of the last response in this case is
+             *        "NNN <errmsg>"
+             */
+            throw new NativeDaemonConnectorException(
+                    code, cmd, response.get(response.size()-1).substring(4));
         }
-
-        if (event.isClassClientError()) {
-            throw new NativeDaemonArgumentException(logCmd, event);
-        }
-        if (event.isClassServerError()) {
-            throw new NativeDaemonFailureException(logCmd, event);
-        }
-
-        return events.toArray(new NativeDaemonEvent[events.size()]);
+        return response;
     }
 
     /**
-     * Append the given argument to {@link StringBuilder}, escaping as needed,
-     * and surrounding with quotes when it contains spaces.
+     * Issues a list command and returns the cooked list
      */
-    @VisibleForTesting
-    static void appendEscaped(StringBuilder builder, String arg) {
-        final boolean hasSpaces = arg.indexOf(' ') >= 0;
-        if (hasSpaces) {
-            builder.append('"');
-        }
+    public String[] doListCommand(String cmd, int expectedResponseCode)
+            throws NativeDaemonConnectorException {
 
-        final int length = arg.length();
-        for (int i = 0; i < length; i++) {
-            final char c = arg.charAt(i);
+        ArrayList<String> rsp = doCommand(cmd);
+        String[] rdata = new String[rsp.size()-1];
+        int idx = 0;
 
-            if (c == '"') {
-                builder.append("\\\"");
-            } else if (c == '\\') {
-                builder.append("\\\\");
-            } else {
-                builder.append(c);
+        for (int i = 0; i < rsp.size(); i++) {
+            String line = rsp.get(i);
+            try {
+                String[] tok = line.split(" ");
+                int code = Integer.parseInt(tok[0]);
+                if (code == expectedResponseCode) {
+                    rdata[idx++] = line.substring(tok[0].length() + 1);
+                } else if (code == NativeDaemonConnector.ResponseCode.CommandOkay) {
+                    if (LOCAL_LOGD) Slog.d(TAG, String.format("List terminated with {%s}", line));
+                    int last = rsp.size() -1;
+                    if (i != last) {
+                        Slog.w(TAG, String.format("Recv'd %d lines after end of list {%s}", (last-i), cmd));
+                        for (int j = i; j <= last ; j++) {
+                            Slog.w(TAG, String.format("ExtraData <%s>", rsp.get(i)));
+                        }
+                    }
+                    return rdata;
+                } else {
+                    throw new NativeDaemonConnectorException(
+                            String.format("Expected list response %d, but got %d",
+                                    expectedResponseCode, code));
+                }
+            } catch (NumberFormatException nfe) {
+                throw new NativeDaemonConnectorException(
+                        String.format("Error reading code '%s'", line));
             }
         }
-
-        if (hasSpaces) {
-            builder.append('"');
-        }
-    }
-
-    private static class NativeDaemonArgumentException extends NativeDaemonConnectorException {
-        public NativeDaemonArgumentException(String command, NativeDaemonEvent event) {
-            super(command, event);
-        }
-
-        @Override
-        public IllegalArgumentException rethrowAsParcelableException() {
-            throw new IllegalArgumentException(getMessage(), this);
-        }
-    }
-
-    private static class NativeDaemonFailureException extends NativeDaemonConnectorException {
-        public NativeDaemonFailureException(String command, NativeDaemonEvent event) {
-            super(command, event);
-        }
-    }
-
-    /**
-     * Command builder that handles argument list building. Any arguments must
-     * be separated from base command so they can be properly escaped.
-     */
-    public static class Command {
-        private String mCmd;
-        private ArrayList<Object> mArguments = Lists.newArrayList();
-
-        public Command(String cmd, Object... args) {
-            mCmd = cmd;
-            for (Object arg : args) {
-                appendArg(arg);
-            }
-        }
-
-        public Command appendArg(Object arg) {
-            mArguments.add(arg);
-            return this;
-        }
+        throw new NativeDaemonConnectorException("Got an empty response");
     }
 
     /** {@inheritDoc} */
     public void monitor() {
         synchronized (mDaemonLock) { }
-    }
-
-    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        mLocalLog.dump(fd, pw, args);
-        pw.println();
-        mResponseQueue.dump(fd, pw, args);
-    }
-
-    private void log(String logstring) {
-        if (LOGD) Slog.d(TAG, logstring);
-        mLocalLog.log(logstring);
-    }
-
-    private void loge(String logstring) {
-        Slog.e(TAG, logstring);
-        mLocalLog.log(logstring);
-    }
-
-    private static class ResponseQueue {
-
-        private static class PendingCmd {
-            public final int cmdNum;
-            public final String logCmd;
-
-            public BlockingQueue<NativeDaemonEvent> responses =
-                    new ArrayBlockingQueue<NativeDaemonEvent>(10);
-
-            // The availableResponseCount member is used to track when we can remove this
-            // instance from the ResponseQueue.
-            // This is used under the protection of a sync of the mPendingCmds object.
-            // A positive value means we've had more writers retreive this object while
-            // a negative value means we've had more readers.  When we've had an equal number
-            // (it goes to zero) we can remove this object from the mPendingCmds list.
-            // Note that we may have more responses for this command (and more readers
-            // coming), but that would result in a new PendingCmd instance being created
-            // and added with the same cmdNum.
-            // Also note that when this goes to zero it just means a parity of readers and
-            // writers have retrieved this object - not that they are done using it.  The
-            // responses queue may well have more responses yet to be read or may get more
-            // responses added to it.  But all those readers/writers have retreived and
-            // hold references to this instance already so it can be removed from
-            // mPendingCmds queue.
-            public int availableResponseCount;
-
-            public PendingCmd(int cmdNum, String logCmd) {
-                this.cmdNum = cmdNum;
-                this.logCmd = logCmd;
-            }
-        }
-
-        private final LinkedList<PendingCmd> mPendingCmds;
-        private int mMaxCount;
-
-        ResponseQueue(int maxCount) {
-            mPendingCmds = new LinkedList<PendingCmd>();
-            mMaxCount = maxCount;
-        }
-
-        public void add(int cmdNum, NativeDaemonEvent response) {
-            PendingCmd found = null;
-            synchronized (mPendingCmds) {
-                for (PendingCmd pendingCmd : mPendingCmds) {
-                    if (pendingCmd.cmdNum == cmdNum) {
-                        found = pendingCmd;
-                        break;
-                    }
-                }
-                if (found == null) {
-                    // didn't find it - make sure our queue isn't too big before adding
-                    while (mPendingCmds.size() >= mMaxCount) {
-                        Slog.e("NativeDaemonConnector.ResponseQueue",
-                                "more buffered than allowed: " + mPendingCmds.size() +
-                                " >= " + mMaxCount);
-                        // let any waiter timeout waiting for this
-                        PendingCmd pendingCmd = mPendingCmds.remove();
-                        Slog.e("NativeDaemonConnector.ResponseQueue",
-                                "Removing request: " + pendingCmd.logCmd + " (" +
-                                pendingCmd.cmdNum + ")");
-                    }
-                    found = new PendingCmd(cmdNum, null);
-                    mPendingCmds.add(found);
-                }
-                found.availableResponseCount++;
-                // if a matching remove call has already retrieved this we can remove this
-                // instance from our list
-                if (found.availableResponseCount == 0) mPendingCmds.remove(found);
-            }
-            try {
-                found.responses.put(response);
-            } catch (InterruptedException e) { }
-        }
-
-        // note that the timeout does not count time in deep sleep.  If you don't want
-        // the device to sleep, hold a wakelock
-        public NativeDaemonEvent remove(int cmdNum, int timeoutMs, String logCmd) {
-            PendingCmd found = null;
-            synchronized (mPendingCmds) {
-                for (PendingCmd pendingCmd : mPendingCmds) {
-                    if (pendingCmd.cmdNum == cmdNum) {
-                        found = pendingCmd;
-                        break;
-                    }
-                }
-                if (found == null) {
-                    found = new PendingCmd(cmdNum, logCmd);
-                    mPendingCmds.add(found);
-                }
-                found.availableResponseCount--;
-                // if a matching add call has already retrieved this we can remove this
-                // instance from our list
-                if (found.availableResponseCount == 0) mPendingCmds.remove(found);
-            }
-            NativeDaemonEvent result = null;
-            try {
-                result = found.responses.poll(timeoutMs, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {}
-            if (result == null) {
-                Slog.e("NativeDaemonConnector.ResponseQueue", "Timeout waiting for response");
-            }
-            return result;
-        }
-
-        public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-            pw.println("Pending requests:");
-            synchronized (mPendingCmds) {
-                for (PendingCmd pendingCmd : mPendingCmds) {
-                    pw.println("  Cmd " + pendingCmd.cmdNum + " - " + pendingCmd.logCmd);
-                }
-            }
-        }
     }
 }
